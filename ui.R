@@ -33,7 +33,7 @@ shinyUI(fluidPage(
   # ),
   
   # Application title
-  titlePanel("Omics analysis"),
+  titlePanel("Survival Analysis"),
   hr(nrow = 2),
   sidebarLayout(
     sidebarPanel(
@@ -144,7 +144,7 @@ shinyUI(fluidPage(
                                             conditionalPanel(condition ="input.help",
                                                              fluidRow(
                                                                column(5,br(),helpText("To verify if the import parameters are correct : the first column has to be the names of the individual, 
-                                       the second the groups. Others are the datas."), 
+                                       the second column: time to event (numeric), the third column: status (0=censored, 1=event). Others are the features/variables."), 
                                                                       helpText("Non attributes values have to appears empty, "),
                                                                       helpText()
                                                                ),
@@ -262,16 +262,16 @@ shinyUI(fluidPage(
                                               column(6,
                                                      radioButtons("test", "Variable Selection Methods",
                                                                   c("No test"="notest",
-                                                                    "Wilcoxon Test (univariate)" = "Wtest",
-                                                                    "Student Test (univariate)" = "Ttest",
-                                                                    "Clustering + ElasticNet (multivariate)" = "clustEnet",
-                                                                    "Lasso (multivariate)" = "lasso",
-                                                                    "ElasticNet (multivariate)" = "elasticnet",
-                                                                    "Ridge/Cox (multivariate)" = "ridge")),
+                                                                    "Cox Univariate (Wald test)" = "coxwald",
+                                                                    "Log-rank Test (univariate)" = "logrank",
+                                                                    "Clustering + Cox ElasticNet (multivariate)" = "clustEnet",
+                                                                    "Cox Lasso (multivariate)" = "coxlasso",
+                                                                    "Cox ElasticNet (multivariate)" = "coxelasticnet",
+                                                                    "Cox Ridge (multivariate)" = "coxridge")),
                                                      conditionalPanel(condition ="input.help",
-                                                                      helpText("Univariate tests: Wilcoxon (non-parametric) and Student (parametric) test each variable independently."),
-                                                                      helpText("Multivariate methods: Lasso, ElasticNet, and Ridge use regularization to select variables while considering their joint effects."),
-                                                                      helpText("Clustering + ElasticNet: Clusters correlated variables, selects best from each cluster, then applies bootstrap ElasticNet for robust selection.")),
+                                                                      helpText("Univariate tests: Cox Wald test and Log-rank test each variable independently for survival."),
+                                                                      helpText("Multivariate methods: Cox Lasso, ElasticNet, and Ridge use penalized Cox regression for variable selection."),
+                                                                      helpText("Clustering + Cox ElasticNet: Clusters correlated variables, selects best from each cluster using Cox models, then applies bootstrap Cox ElasticNet.")),
                                                      checkboxInput("SFtest","Shapiro and Fisher Tests",F),
                                                      conditionalPanel(condition ="input.help",helpText("The shapiro test is a test of normallity. The F test is a test of equality of variance."))
                                               ),
@@ -377,15 +377,13 @@ shinyUI(fluidPage(
                                    tabPanel("Model", icon = icon("cogs"),
                                             fluidRow(
                                               column(4,
-                                                     radioButtons("model", "Type of model to adjust",
+                                                     radioButtons("model", "Type of survival model to adjust",
                                                                   c("No model" = "nomodel",
-                                                                    "Random Forest"="randomforest",
-                                                                    "Support Vector Machine" = "svm",
-                                                                    "Penalized Logistic Regression (ElasticNet)"="elasticnet",
-                                                                    "XGBoost"="xgboost",
-                                                                    #"LightGBM"="lightgbm",
-                                                                    "Naive Bayes"="naivebayes",
-                                                                    "K-Nearest Neighbors (KNN)"="knn"))
+                                                                    "Cox Proportional Hazards"="cox",
+                                                                    "Random Survival Forest"="rsf",
+                                                                    "Cox with Lasso"="coxlasso",
+                                                                    "Cox with ElasticNet"="coxelasticnet",
+                                                                    "Cox with Ridge"="coxridge"))
                                                      #,
                                                      # conditionalPanel(condition ="input.help",
                                                      #                  helpText("Random Forest: ensemble method with automatic mtry tuning."),
@@ -723,11 +721,11 @@ shinyUI(fluidPage(
                                                                                conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames1","show indivuals names",value=FALSE)),
                                                                                br(),
                                                                                tableOutput("tabmodeldecouv"),
-                                                                               "Sensibility = ",textOutput("sensibilitydecouv",inline=T), 
+                                                                               "C-index = ",textOutput("cindexdecouv",inline=T),
                                                                                br(),
-                                                                               "Specificity = ",textOutput("specificitydecouv",inline=T),
+                                                                               "Integrated Brier Score = ",textOutput("ibsdecouv",inline=T),
                                                                                br(),hr(),br(),
-                                                                               tableOutput("youndendecouv")
+                                                                               tableOutput("survstats_decouv")
                                                                                
                                                                         )
                                                                       ),
@@ -751,11 +749,11 @@ shinyUI(fluidPage(
                                                                                          column(2,
                                                                                                 #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
                                                                                                 tableOutput("tabmodelval"),
-                                                                                                "Sensibility = ",textOutput("sensibilityval",inline=T), 
+                                                                                                "C-index = ",textOutput("cindexval",inline=T),
                                                                                                 br(),
-                                                                                                "Specificity = ",textOutput("specificityval",inline=T),
+                                                                                                "Integrated Brier Score = ",textOutput("ibsval",inline=T),
                                                                                                 br(),hr(),br(),
-                                                                                                tableOutput("youndenval")
+                                                                                                tableOutput("survstats_val")
                                                                                                 
                                                                                          )
                                                                                        )
