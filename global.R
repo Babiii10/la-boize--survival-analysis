@@ -491,6 +491,317 @@ plot_cumulative_hazard <- function(time, status, risk_groups = NULL, title = "Cu
 }
 
 ##########################
+# Temporal Classification Functions (Time-Dependent Metrics)
+##########################
+
+# Get survival predictions at multiple time points
+# Returns a matrix: [patients x time_points] with S(t) for each patient
+get_survival_predictions <- function(model, newdata, times, model_type = "cox"){
+  tryCatch({
+    if(model_type == "cox"){
+      # Cox model predictions
+      surv_obj <- survfit(model, newdata = newdata)
+
+      # Extract survival probabilities at specified times
+      surv_matrix <- matrix(NA, nrow = nrow(newdata), ncol = length(times))
+
+      for(i in 1:nrow(newdata)){
+        single_surv <- survfit(model, newdata = newdata[i, , drop = FALSE])
+        surv_probs <- summary(single_surv, times = times, extend = TRUE)$surv
+        surv_matrix[i, ] <- surv_probs
+      }
+
+    } else if(model_type == "coxnet"){
+      # Penalized Cox model
+      x_matrix <- as.matrix(newdata[, -c(1:2)])  # Exclude time and status
+
+      # Get linear predictor
+      lp <- predict(model, newx = x_matrix, s = "lambda.min", type = "link")[,1]
+
+      # Use baseline hazard to compute survival probabilities
+      # For simplicity, we'll use the Cox approach with the linear predictor
+      # This requires refitting a cox model with offset
+      surv_matrix <- matrix(NA, nrow = nrow(newdata), ncol = length(times))
+
+      # Simplified: use exp(-exp(lp)) as rough approximation
+      for(j in 1:length(times)){
+        # Baseline survival estimate (simplified)
+        surv_matrix[, j] <- exp(-exp(lp) * times[j] / max(times))
+      }
+
+    } else if(model_type == "rsf" || model_type == "ranger"){
+      # Random Survival Forest
+      pred <- predict(model, data = newdata)
+
+      # Extract survival matrix
+      if(!is.null(pred$survival)){
+        # Interpolate to requested times
+        model_times <- pred$unique.death.times
+        surv_matrix <- matrix(NA, nrow = nrow(newdata), ncol = length(times))
+
+        for(i in 1:nrow(newdata)){
+          patient_surv <- pred$survival[i, ]
+          # Interpolate
+          surv_matrix[i, ] <- approx(x = model_times, y = patient_surv,
+                                     xout = times, rule = 2, method = "constant",
+                                     f = 0)$y
+        }
+      }
+    }
+
+    colnames(surv_matrix) <- paste0("t_", times)
+    return(surv_matrix)
+
+  }, error = function(e) {
+    warning(paste("Error getting survival predictions:", e$message))
+    return(NULL)
+  })
+}
+
+# Calculate classification metrics at a specific time point
+# Uses survival probability S(t) to classify: if S(t) >= threshold, predict event-free at time t
+calculate_classification_metrics_at_time <- function(surv_probs, actual_time, actual_status,
+                                                      eval_time, threshold = NULL){
+  tryCatch({
+    # Create actual binary outcome at eval_time
+    # 1 = event-free at eval_time (survived past eval_time)
+    # 0 = event occurred before or at eval_time
+    actual_class <- ifelse(actual_time > eval_time | (actual_time <= eval_time & actual_status == 0), 1, 0)
+
+    # If no threshold provided, find optimal threshold using Youden index
+    if(is.null(threshold)){
+      roc_obj <- roc(actual_class, surv_probs, direction = "<", quiet = TRUE)
+
+      # Find Youden index
+      coords_result <- coords(roc_obj, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity"))
+      threshold <- coords_result$threshold
+      auc_value <- as.numeric(auc(roc_obj))
+      sensitivity <- coords_result$sensitivity
+      specificity <- coords_result$specificity
+    } else {
+      # Use provided threshold
+      roc_obj <- roc(actual_class, surv_probs, direction = "<", quiet = TRUE)
+      auc_value <- as.numeric(auc(roc_obj))
+      coords_result <- coords(roc_obj, threshold, ret = c("sensitivity", "specificity"))
+      sensitivity <- coords_result$sensitivity
+      specificity <- coords_result$specificity
+    }
+
+    # Make predictions based on threshold
+    predicted_class <- ifelse(surv_probs >= threshold, 1, 0)
+
+    # Confusion matrix
+    confusion_matrix <- table(Predicted = factor(predicted_class, levels = c(0, 1)),
+                               Actual = factor(actual_class, levels = c(0, 1)))
+
+    return(list(
+      time = eval_time,
+      auc = auc_value,
+      sensitivity = sensitivity,
+      specificity = specificity,
+      threshold = threshold,
+      confusion_matrix = confusion_matrix,
+      predicted_class = predicted_class,
+      actual_class = actual_class
+    ))
+
+  }, error = function(e) {
+    warning(paste("Error calculating classification metrics at time", eval_time, ":", e$message))
+    return(NULL)
+  })
+}
+
+# Calculate temporal classification metrics across multiple time points
+calculate_temporal_metrics <- function(model, data, time_col = "time", status_col = "status",
+                                       time_points = NULL, model_type = "cox"){
+  tryCatch({
+    if(is.null(time_points)){
+      # Use quantiles of observed event times
+      max_time <- max(data[[time_col]], na.rm = TRUE)
+      event_times <- data[data[[status_col]] == 1, time_col]
+      time_points <- seq(from = quantile(event_times, 0.1, na.rm = TRUE),
+                        to = quantile(event_times, 0.9, na.rm = TRUE),
+                        length.out = 10)
+    }
+
+    # Get survival predictions for all time points
+    surv_matrix <- get_survival_predictions(model, data, time_points, model_type)
+
+    if(is.null(surv_matrix)){
+      return(NULL)
+    }
+
+    # Calculate metrics for each time point
+    results_list <- list()
+
+    for(j in 1:length(time_points)){
+      t <- time_points[j]
+      surv_probs <- surv_matrix[, j]
+
+      metrics <- calculate_classification_metrics_at_time(
+        surv_probs = surv_probs,
+        actual_time = data[[time_col]],
+        actual_status = data[[status_col]],
+        eval_time = t
+      )
+
+      results_list[[j]] <- metrics
+    }
+
+    # Compile into data frame
+    metrics_df <- data.frame(
+      time = sapply(results_list, function(x) x$time),
+      AUC = sapply(results_list, function(x) x$auc),
+      Sensitivity = sapply(results_list, function(x) x$sensitivity),
+      Specificity = sapply(results_list, function(x) x$specificity),
+      Threshold = sapply(results_list, function(x) x$threshold)
+    )
+
+    return(list(
+      metrics_df = metrics_df,
+      detailed_results = results_list
+    ))
+
+  }, error = function(e) {
+    warning(paste("Error calculating temporal metrics:", e$message))
+    return(NULL)
+  })
+}
+
+# Plot temporal evolution of classification metrics
+plot_temporal_classification_metrics <- function(temporal_metrics, title = "Time-Dependent Classification Metrics"){
+  tryCatch({
+    if(is.null(temporal_metrics) || is.null(temporal_metrics$metrics_df)){
+      return(NULL)
+    }
+
+    metrics_df <- temporal_metrics$metrics_df
+
+    # Reshape for ggplot
+    metrics_long <- reshape2::melt(metrics_df, id.vars = "time",
+                                   measure.vars = c("AUC", "Sensitivity", "Specificity"),
+                                   variable.name = "Metric", value.name = "Value")
+
+    # Create plot
+    p <- ggplot(metrics_long, aes(x = time, y = Value, color = Metric, group = Metric)) +
+      geom_line(size = 1.2) +
+      geom_point(size = 2.5) +
+      scale_color_manual(values = c("AUC" = "#E7B800", "Sensitivity" = "#2E9FDF", "Specificity" = "#FC4E07")) +
+      theme_minimal() +
+      labs(title = title,
+           x = "Time",
+           y = "Metric Value",
+           color = "Metric") +
+      ylim(0, 1) +
+      theme(legend.position = "bottom",
+            plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 10))
+
+    return(p)
+
+  }, error = function(e) {
+    warning(paste("Error plotting temporal metrics:", e$message))
+    return(NULL)
+  })
+}
+
+##########################
+# Display Helper Functions for Survival Analysis
+##########################
+
+# Display risk score quantiles
+display_risk_quantiles <- function(risk_scores){
+  tryCatch({
+    if(is.null(risk_scores) || length(risk_scores) == 0){
+      return(NULL)
+    }
+
+    quantiles <- quantile(risk_scores, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+    mean_risk <- mean(risk_scores, na.rm = TRUE)
+
+    risk_summary <- data.frame(
+      Statistic = c("Minimum", "1st Quartile", "Median", "3rd Quartile", "Maximum", "Mean"),
+      Risk_Score = c(quantiles[1], quantiles[2], quantiles[3], quantiles[4], quantiles[5], mean_risk)
+    )
+
+    return(risk_summary)
+
+  }, error = function(e) {
+    warning(paste("Error displaying risk quantiles:", e$message))
+    return(NULL)
+  })
+}
+
+# Display survival statistics
+display_survival_statistics <- function(model, data = NULL, time_col = "time", status_col = "status",
+                                        model_type = "cox", risk_scores = NULL){
+  tryCatch({
+    stats_list <- list()
+
+    # Median survival time
+    if(model_type == "cox"){
+      if(is.null(data)){
+        surv_obj <- survfit(model)
+      } else {
+        # For overall population
+        median_surv <- median(data[[time_col]][data[[status_col]] == 1], na.rm = TRUE)
+
+        # Also calculate model-based median
+        surv_obj <- survfit(model, newdata = data)
+      }
+
+      tryCatch({
+        median_time <- summary(surv_obj)$table["median"]
+        stats_list$median_survival <- median_time
+      }, error = function(e){
+        stats_list$median_survival <- NA
+      })
+    }
+
+    # Survival probabilities at specific times (1, 3, 5 years or equivalent)
+    if(!is.null(data)){
+      max_time <- max(data[[time_col]], na.rm = TRUE)
+      time_points <- c(max_time * 0.2, max_time * 0.5, max_time * 0.8)
+
+      if(model_type == "cox"){
+        surv_obj <- survfit(model)
+        surv_summary <- summary(surv_obj, times = time_points, extend = TRUE)
+
+        stats_list$survival_probs <- data.frame(
+          Time = time_points,
+          Survival_Probability = surv_summary$surv
+        )
+      }
+    }
+
+    # Risk group statistics if risk scores provided
+    if(!is.null(risk_scores) && !is.null(data)){
+      median_risk <- median(risk_scores, na.rm = TRUE)
+      risk_groups <- ifelse(risk_scores >= median_risk, "High", "Low")
+
+      # Median survival by risk group
+      high_risk_times <- data[[time_col]][risk_groups == "High" & data[[status_col]] == 1]
+      low_risk_times <- data[[time_col]][risk_groups == "Low" & data[[status_col]] == 1]
+
+      stats_list$median_by_group <- data.frame(
+        Group = c("High Risk", "Low Risk"),
+        Median_Survival = c(median(high_risk_times, na.rm = TRUE),
+                           median(low_risk_times, na.rm = TRUE)),
+        N_events = c(sum(risk_groups == "High" & data[[status_col]] == 1),
+                    sum(risk_groups == "Low" & data[[status_col]] == 1))
+      )
+    }
+
+    return(stats_list)
+
+  }, error = function(e) {
+    warning(paste("Error displaying survival statistics:", e$message))
+    return(NULL)
+  })
+}
+
+##########################
 importfile<-function (datapath,extension,NAstring="NA",sheet=1,skiplines=0,dec=".",sep=","){
   # datapath: path of the file
   #extention: extention of the file : csv, xls, ou xlsx

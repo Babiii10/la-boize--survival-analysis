@@ -720,13 +720,34 @@ shinyUI(fluidPage(
                                                                         column(2,
                                                                                conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames1","show indivuals names",value=FALSE)),
                                                                                br(),
+                                                                               h5("Risk Score Quantiles"),
                                                                                tableOutput("tabmodeldecouv"),
+                                                                               br(),
+                                                                               h5("Survival Metrics"),
                                                                                "C-index = ",textOutput("cindexdecouv",inline=T),
                                                                                br(),
                                                                                "Integrated Brier Score = ",textOutput("ibsdecouv",inline=T),
                                                                                br(),hr(),br(),
-                                                                               tableOutput("survstats_decouv")
-                                                                               
+                                                                               h5("Median Survival by Group"),
+                                                                               tableOutput("survival_stats_learning")
+
+                                                                        )
+                                                                      ),
+                                                                      hr(),
+                                                                      h4("Time-Dependent Classification Metrics (Learning Set)"),
+                                                                      fluidRow(
+                                                                        column(8,
+                                                                               plotOutput("plot_temporal_classif_learning", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                               p(downloadButton("download_temporal_plot_learning","Download plot"),align="center")
+                                                                        ),
+                                                                        column(4,
+                                                                               h5("Confusion Matrix (at median time)"),
+                                                                               tableOutput("confusion_matrix_learning"),
+                                                                               br(),
+                                                                               h5("Temporal Metrics Summary"),
+                                                                               div(style = "overflow-x: auto; max-height: 300px;",
+                                                                                   tableOutput("table_temporal_metrics_learning")
+                                                                               )
                                                                         )
                                                                       ),
                                                                       hr(),
@@ -748,13 +769,34 @@ shinyUI(fluidPage(
                                                                                          ),
                                                                                          column(2,
                                                                                                 #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
+                                                                                                h5("Risk Score Quantiles"),
                                                                                                 tableOutput("tabmodelval"),
+                                                                                                br(),
+                                                                                                h5("Survival Metrics"),
                                                                                                 "C-index = ",textOutput("cindexval",inline=T),
                                                                                                 br(),
                                                                                                 "Integrated Brier Score = ",textOutput("ibsval",inline=T),
                                                                                                 br(),hr(),br(),
-                                                                                                tableOutput("survstats_val")
-                                                                                                
+                                                                                                h5("Median Survival by Group"),
+                                                                                                tableOutput("survival_stats_validation")
+
+                                                                                         )
+                                                                                       ),
+                                                                                       hr(),
+                                                                                       h4("Time-Dependent Classification Metrics (Validation Set)"),
+                                                                                       fluidRow(
+                                                                                         column(8,
+                                                                                                plotOutput("plot_temporal_classif_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                                                p(downloadButton("download_temporal_plot_validation","Download plot"),align="center")
+                                                                                         ),
+                                                                                         column(4,
+                                                                                                h5("Confusion Matrix (at median time)"),
+                                                                                                tableOutput("confusion_matrix_validation"),
+                                                                                                br(),
+                                                                                                h5("Temporal Metrics Summary"),
+                                                                                                div(style = "overflow-x: auto; max-height: 300px;",
+                                                                                                    tableOutput("table_temporal_metrics_validation")
+                                                                                                )
                                                                                          )
                                                                                        )
                                                                       )

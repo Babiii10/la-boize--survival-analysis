@@ -1266,6 +1266,298 @@ output$ibsdecouv<-renderText({
   }
 })
 
+# ===============================
+# TEMPORAL CLASSIFICATION OUTPUTS - LEARNING SET
+# ===============================
+
+# Calculate and store temporal metrics for learning set
+temporal_metrics_learning <- reactive({
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(datalearningmodel) && !is.null(datalearningmodel$reslearningmodel$riskscores)){
+    # Detect model type
+    model <- MODEL()$MODEL
+    model_type <- "cox"  # Default
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    # Calculate temporal metrics
+    temporal_results <- calculate_temporal_metrics(
+      model = model,
+      data = datalearningmodel$learningmodel,
+      time_col = "time",
+      status_col = "status",
+      time_points = NULL,  # Auto-selected
+      model_type = model_type
+    )
+
+    return(temporal_results)
+  } else {
+    return(NULL)
+  }
+})
+
+# Plot temporal classification metrics (AUC/Sens/Spec over time)
+output$plot_temporal_classif_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics)){
+    p <- plot_temporal_classification_metrics(
+      temporal_metrics,
+      title = "Time-Dependent Classification Metrics - Learning Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for temporal plot
+output$download_temporal_plot_learning <- downloadHandler(
+  filename = function() { paste('temporal_metrics_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    if(!is.null(temporal_metrics)){
+      p <- plot_temporal_classification_metrics(temporal_metrics)
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Table of temporal metrics
+output$table_temporal_metrics_learning <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+    metrics_df$time <- round(metrics_df$time, 2)
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Confusion matrix at a specific time point (median time)
+output$confusion_matrix_learning <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    # Use median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+      time_point <- round(result_at_time$time, 2)
+
+      # Convert to data frame with labels
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Display survival statistics (pure survival part)
+output$survival_stats_learning <- renderTable({
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(datalearningmodel) && !is.null(datalearningmodel$reslearningmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    stats <- display_survival_statistics(
+      model = model,
+      data = datalearningmodel$learningmodel,
+      time_col = "time",
+      status_col = "status",
+      model_type = model_type,
+      risk_scores = datalearningmodel$reslearningmodel$riskscores
+    )
+
+    if(!is.null(stats) && !is.null(stats$median_by_group)){
+      stats_df <- stats$median_by_group
+      stats_df$Median_Survival <- round(stats_df$Median_Survival, 2)
+      return(stats_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# ===============================
+# TEMPORAL CLASSIFICATION OUTPUTS - VALIDATION SET
+# ===============================
+
+# Calculate and store temporal metrics for validation set
+temporal_metrics_validation <- reactive({
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    temporal_results <- calculate_temporal_metrics(
+      model = model,
+      data = datavalidationmodel$validationmodel,
+      time_col = "time",
+      status_col = "status",
+      time_points = NULL,
+      model_type = model_type
+    )
+
+    return(temporal_results)
+  } else {
+    return(NULL)
+  }
+})
+
+# Plot temporal classification metrics for validation
+output$plot_temporal_classif_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics)){
+    p <- plot_temporal_classification_metrics(
+      temporal_metrics,
+      title = "Time-Dependent Classification Metrics - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for temporal plot - validation
+output$download_temporal_plot_validation <- downloadHandler(
+  filename = function() { paste('temporal_metrics_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    if(!is.null(temporal_metrics)){
+      p <- plot_temporal_classification_metrics(temporal_metrics)
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Table of temporal metrics - validation
+output$table_temporal_metrics_validation <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+    metrics_df$time <- round(metrics_df$time, 2)
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Confusion matrix at median time - validation
+output$confusion_matrix_validation <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Display survival statistics - validation
+output$survival_stats_validation <- renderTable({
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    stats <- display_survival_statistics(
+      model = model,
+      data = datavalidationmodel$validationmodel,
+      time_col = "time",
+      status_col = "status",
+      model_type = model_type,
+      risk_scores = datavalidationmodel$resvalidationmodel$riskscores
+    )
+
+    if(!is.null(stats) && !is.null(stats$median_by_group)){
+      stats_df <- stats$median_by_group
+      stats_df$Median_Survival <- round(stats_df$Median_Survival, 2)
+      return(stats_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
 
 output$downloaddatavalidation <- downloadHandler(
   filename = function() { paste('dataset', '.',input$paramdowntable, sep='') },
