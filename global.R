@@ -621,6 +621,7 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
       confusion_matrix = confusion_matrix,
       predicted_class = predicted_class,
       actual_class = actual_class,
+      risk_scores = risk_scores,  # Add risk scores for visualization
       n_patients = sum(valid_patients),
       n_excluded = sum(!valid_patients)
     ))
@@ -967,6 +968,154 @@ export_results_csv <- function(temporal_metrics_learning, temporal_metrics_valid
   }, error = function(e) {
     warning(paste("Error exporting CSV:", e$message))
     return(FALSE)
+  })
+}
+
+##########################
+# Visualization Functions for Time-Dependent Classification
+##########################
+
+# Plot risk score distribution with Youden threshold
+# Shows scatter of risk scores at a specific time point with threshold line
+plot_risk_scatter_with_threshold <- function(temporal_metrics, data,
+                                             time_col = "time", status_col = "status",
+                                             time_point_index = NULL,
+                                             title = "Risk Score Distribution with Youden Threshold"){
+  tryCatch({
+    if(is.null(temporal_metrics) || is.null(temporal_metrics$detailed_results)){
+      warning("No temporal metrics available")
+      return(NULL)
+    }
+
+    # Default to median time point
+    if(is.null(time_point_index)){
+      n_times <- length(temporal_metrics$detailed_results)
+      time_point_index <- ceiling(n_times / 2)
+    }
+
+    result_at_time <- temporal_metrics$detailed_results[[time_point_index]]
+
+    if(is.null(result_at_time)){
+      warning("No result at specified time point")
+      return(NULL)
+    }
+
+    eval_time <- result_at_time$time
+    threshold <- result_at_time$threshold
+
+    # Get risk scores (1 - S(t))
+    risk_scores <- result_at_time$risk_scores
+    actual_class <- result_at_time$actual_class
+
+    if(is.null(risk_scores) || is.null(actual_class)){
+      warning("Missing risk scores or actual class")
+      return(NULL)
+    }
+
+    # Create data frame for plotting
+    plot_df <- data.frame(
+      Sample = 1:length(risk_scores),
+      Risk_Score = risk_scores,
+      Status = ifelse(actual_class == 1, "Event by time t", "Event-free at time t"),
+      Predicted = ifelse(risk_scores >= threshold, "High Risk", "Low Risk")
+    )
+
+    # Create plot
+    p <- ggplot(plot_df, aes(x = Sample, y = Risk_Score)) +
+      # Add threshold line
+      geom_hline(yintercept = threshold, linetype = "dashed", color = "red", size = 1.2) +
+      # Add points colored by actual status
+      geom_point(aes(color = Status, shape = Predicted), size = 3, alpha = 0.7) +
+      # Add threshold annotation
+      annotate("text", x = max(plot_df$Sample) * 0.85, y = threshold + 0.05,
+               label = paste0("Youden Threshold = ", round(threshold, 3)),
+               color = "red", size = 4, fontface = "bold") +
+      scale_color_manual(values = c("Event by time t" = "#E74C3C",
+                                     "Event-free at time t" = "#3498DB")) +
+      scale_shape_manual(values = c("High Risk" = 17, "Low Risk" = 16)) +
+      labs(title = paste0(title, " (t = ", round(eval_time, 2), ")"),
+           x = "Sample Index",
+           y = "Risk Score (1 - S(t))",
+           color = "Actual Status",
+           shape = "Predicted Risk") +
+      theme_minimal() +
+      theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 10),
+            legend.position = "bottom",
+            legend.box = "vertical")
+
+    return(p)
+
+  }, error = function(e) {
+    warning(paste("Error creating risk scatter plot:", e$message))
+    return(NULL)
+  })
+}
+
+# Plot risk score density with threshold
+plot_risk_density_with_threshold <- function(temporal_metrics,
+                                             time_point_index = NULL,
+                                             title = "Risk Score Distribution by Actual Status"){
+  tryCatch({
+    if(is.null(temporal_metrics) || is.null(temporal_metrics$detailed_results)){
+      warning("No temporal metrics available")
+      return(NULL)
+    }
+
+    # Default to median time point
+    if(is.null(time_point_index)){
+      n_times <- length(temporal_metrics$detailed_results)
+      time_point_index <- ceiling(n_times / 2)
+    }
+
+    result_at_time <- temporal_metrics$detailed_results[[time_point_index]]
+
+    if(is.null(result_at_time)){
+      warning("No result at specified time point")
+      return(NULL)
+    }
+
+    eval_time <- result_at_time$time
+    threshold <- result_at_time$threshold
+    risk_scores <- result_at_time$risk_scores
+    actual_class <- result_at_time$actual_class
+
+    if(is.null(risk_scores) || is.null(actual_class)){
+      warning("Missing risk scores or actual class")
+      return(NULL)
+    }
+
+    # Create data frame
+    plot_df <- data.frame(
+      Risk_Score = risk_scores,
+      Status = ifelse(actual_class == 1, "Event by time t", "Event-free at time t")
+    )
+
+    # Create density plot
+    p <- ggplot(plot_df, aes(x = Risk_Score, fill = Status)) +
+      geom_density(alpha = 0.5) +
+      geom_vline(xintercept = threshold, linetype = "dashed", color = "red", size = 1.2) +
+      annotate("text", x = threshold + 0.05, y = 0,
+               label = paste0("Threshold = ", round(threshold, 3)),
+               color = "red", size = 4, fontface = "bold", angle = 90, vjust = -0.5) +
+      scale_fill_manual(values = c("Event by time t" = "#E74C3C",
+                                    "Event-free at time t" = "#3498DB")) +
+      labs(title = paste0(title, " (t = ", round(eval_time, 2), ")"),
+           x = "Risk Score (1 - S(t))",
+           y = "Density",
+           fill = "Actual Status") +
+      theme_minimal() +
+      theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 10),
+            legend.position = "bottom")
+
+    return(p)
+
+  }, error = function(e) {
+    warning(paste("Error creating risk density plot:", e$message))
+    return(NULL)
   })
 }
 

@@ -1074,6 +1074,92 @@ shinyUI(fluidPage(
                                                        )
                                               )
                                             )
+                                   ),
+
+                                   # New Survival Classif tab
+                                   tabPanel("Survival Classif", icon = icon("chart-line"),
+                                            fluidRow(
+                                              column(12,
+                                                     h3("Time-Dependent Classification Analysis"),
+                                                     p("This section presents the hybrid survival-classification approach, showing temporal evolution of classification metrics.")
+                                              )
+                                            ),
+                                            hr(),
+
+                                            # Training Set Section
+                                            fluidRow(
+                                              column(12,
+                                                     h4("Training Set - Time-Dependent Classification", style = "color: #2C3E50; font-weight: bold;")
+                                              )
+                                            ),
+                                            fluidRow(
+                                              column(4,
+                                                     h5("Confusion Matrix (at median time)"),
+                                                     tableOutput("confusion_matrix_learning_tab"),
+                                                     br(),
+                                                     h5("Classification Metrics Summary"),
+                                                     div(style = "overflow-x: auto; max-height: 250px;",
+                                                         tableOutput("table_temporal_metrics_learning_tab")
+                                                     )
+                                              ),
+                                              column(8,
+                                                     h5("Time-Dependent ROC Curve (at median time)"),
+                                                     plotOutput("plot_timeROC_learning", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                     p(downloadButton("download_timeROC_learning","Download ROC plot"),align="center")
+                                              )
+                                            ),
+                                            fluidRow(
+                                              column(12,
+                                                     h5("Risk Score Distribution with Youden Threshold (at median time)"),
+                                                     plotOutput("plot_scatter_youden_learning", height = "300px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                     p(downloadButton("download_scatter_learning","Download scatter plot"),align="center")
+                                              )
+                                            ),
+                                            hr(),
+
+                                            # Validation Set Section
+                                            conditionalPanel(condition = "input.adjustval==true",
+                                                            fluidRow(
+                                                              column(12,
+                                                                     h4("Validation Set - Time-Dependent Classification", style = "color: #2C3E50; font-weight: bold;")
+                                                              )
+                                                            ),
+                                                            fluidRow(
+                                                              column(4,
+                                                                     h5("Confusion Matrix (at median time)"),
+                                                                     tableOutput("confusion_matrix_validation_tab"),
+                                                                     br(),
+                                                                     h5("Classification Metrics Summary"),
+                                                                     div(style = "overflow-x: auto; max-height: 250px;",
+                                                                         tableOutput("table_temporal_metrics_validation_tab")
+                                                                     )
+                                                              ),
+                                                              column(8,
+                                                                     h5("Time-Dependent ROC Curve (at median time)"),
+                                                                     plotOutput("plot_timeROC_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                     p(downloadButton("download_timeROC_validation","Download ROC plot"),align="center")
+                                                              )
+                                                            ),
+                                                            fluidRow(
+                                                              column(12,
+                                                                     h5("Risk Score Distribution with Youden Threshold (at median time)"),
+                                                                     plotOutput("plot_scatter_youden_validation", height = "300px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                     p(downloadButton("download_scatter_validation","Download scatter plot"),align="center")
+                                                              )
+                                                            )
+                                            ),
+                                            hr(),
+
+                                            # Export section
+                                            fluidRow(
+                                              column(12,
+                                                     h4("Export Classification Results"),
+                                                     p("Download time-dependent classification metrics and visualizations:"),
+                                                     p(downloadButton("download_classif_complete","Download Complete Report (.xlsx)"),
+                                                       downloadButton("download_classif_csv","Download Metrics (.csv)"),
+                                                       align="center")
+                                              )
+                                            )
                                    )
                        )
       )
