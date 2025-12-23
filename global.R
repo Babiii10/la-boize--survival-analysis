@@ -559,18 +559,34 @@ get_survival_predictions <- function(model, newdata, times, model_type = "cox"){
 }
 
 # Calculate classification metrics at a specific time point
-# Uses survival probability S(t) to classify: if S(t) >= threshold, predict event-free at time t
+# Uses 1-S(t) as risk score: probability of having event by time t
 calculate_classification_metrics_at_time <- function(surv_probs, actual_time, actual_status,
                                                       eval_time, threshold = NULL){
   tryCatch({
+    # FILTER: Remove patients censored before eval_time (lost to follow-up)
+    # We only keep patients for whom we KNOW the status at eval_time:
+    # - Patients with event at or before eval_time (time <= eval_time & status == 1)
+    # - Patients still at risk after eval_time (time > eval_time)
+    # EXCLUDE: Patients censored before eval_time (time < eval_time & status == 0)
+
+    valid_patients <- (actual_time > eval_time) | (actual_time <= eval_time & actual_status == 1)
+
+    # Filter data
+    surv_probs_filtered <- surv_probs[valid_patients]
+    actual_time_filtered <- actual_time[valid_patients]
+    actual_status_filtered <- actual_status[valid_patients]
+
+    # Convert S(t) to risk score: 1 - S(t) = probability of event by time t
+    risk_scores <- 1 - surv_probs_filtered
+
     # Create actual binary outcome at eval_time
-    # 1 = event-free at eval_time (survived past eval_time)
-    # 0 = event occurred before or at eval_time
-    actual_class <- ifelse(actual_time > eval_time | (actual_time <= eval_time & actual_status == 0), 1, 0)
+    # 1 = had event by eval_time (event occurred before or at eval_time)
+    # 0 = event-free at eval_time (survived past eval_time)
+    actual_class <- ifelse(actual_time_filtered <= eval_time & actual_status_filtered == 1, 1, 0)
 
     # If no threshold provided, find optimal threshold using Youden index
     if(is.null(threshold)){
-      roc_obj <- roc(actual_class, surv_probs, direction = "<", quiet = TRUE)
+      roc_obj <- roc(actual_class, risk_scores, direction = ">", quiet = TRUE)
 
       # Find Youden index
       coords_result <- coords(roc_obj, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity"))
@@ -580,7 +596,7 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
       specificity <- coords_result$specificity
     } else {
       # Use provided threshold
-      roc_obj <- roc(actual_class, surv_probs, direction = "<", quiet = TRUE)
+      roc_obj <- roc(actual_class, risk_scores, direction = ">", quiet = TRUE)
       auc_value <- as.numeric(auc(roc_obj))
       coords_result <- coords(roc_obj, threshold, ret = c("sensitivity", "specificity"))
       sensitivity <- coords_result$sensitivity
@@ -588,7 +604,8 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
     }
 
     # Make predictions based on threshold
-    predicted_class <- ifelse(surv_probs >= threshold, 1, 0)
+    # If risk_score >= threshold, predict event (class 1)
+    predicted_class <- ifelse(risk_scores >= threshold, 1, 0)
 
     # Confusion matrix
     confusion_matrix <- table(Predicted = factor(predicted_class, levels = c(0, 1)),
@@ -602,7 +619,9 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
       threshold = threshold,
       confusion_matrix = confusion_matrix,
       predicted_class = predicted_class,
-      actual_class = actual_class
+      actual_class = actual_class,
+      n_patients = sum(valid_patients),
+      n_excluded = sum(!valid_patients)
     ))
 
   }, error = function(e) {
@@ -654,7 +673,9 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
       AUC = sapply(results_list, function(x) x$auc),
       Sensitivity = sapply(results_list, function(x) x$sensitivity),
       Specificity = sapply(results_list, function(x) x$specificity),
-      Threshold = sapply(results_list, function(x) x$threshold)
+      Threshold = sapply(results_list, function(x) x$threshold),
+      N_patients = sapply(results_list, function(x) x$n_patients),
+      N_excluded = sapply(results_list, function(x) x$n_excluded)
     )
 
     return(list(

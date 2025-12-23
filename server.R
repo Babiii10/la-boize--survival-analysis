@@ -1343,11 +1343,14 @@ output$table_temporal_metrics_learning <- renderTable({
   if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
     metrics_df <- temporal_metrics$metrics_df
     # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
     metrics_df$AUC <- round(metrics_df$AUC, 3)
     metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
     metrics_df$Specificity <- round(metrics_df$Specificity, 3)
     metrics_df$Threshold <- round(metrics_df$Threshold, 3)
-    metrics_df$time <- round(metrics_df$time, 2)
+
+    # Reorder columns for better display
+    metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
 
     return(metrics_df)
   } else {
@@ -1489,11 +1492,15 @@ output$table_temporal_metrics_validation <- renderTable({
 
   if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
     metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
     metrics_df$AUC <- round(metrics_df$AUC, 3)
     metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
     metrics_df$Specificity <- round(metrics_df$Specificity, 3)
     metrics_df$Threshold <- round(metrics_df$Threshold, 3)
-    metrics_df$time <- round(metrics_df$time, 2)
+
+    # Reorder columns for better display
+    metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
 
     return(metrics_df)
   } else {
