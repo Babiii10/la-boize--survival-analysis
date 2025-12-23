@@ -2481,9 +2481,325 @@ output$downloadplottestparametersboth = downloadHandler(
 #     scale_fill_brewer(palette = "Set1") +
 #     # scale_fill_manual(values = custom_colors) +
 #     theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
-#   
+#
 # }
 
-}) 
+##########################
+# New Survival Classif Tab Outputs
+##########################
+
+# Tables for confusion matrices - Training Set (for new tab)
+output$confusion_matrix_learning_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Tables for confusion matrices - Validation Set (for new tab)
+output$confusion_matrix_validation_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Tables for temporal metrics - Training Set (for new tab)
+output$table_temporal_metrics_learning_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Select key columns
+    metrics_df <- metrics_df[, c("time", "AUC", "Sensitivity", "Specificity", "Threshold")]
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Tables for temporal metrics - Validation Set (for new tab)
+output$table_temporal_metrics_validation_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Select key columns - Note: Threshold is from TRAINING
+    metrics_df <- metrics_df[, c("time", "AUC", "Sensitivity", "Specificity", "Threshold")]
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Plot timeROC curve - Training Set
+output$plot_timeROC_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+    # Get median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    p <- plot_timeROC_curve(
+      temporal_metrics$timeROC_obj,
+      time_point_index = median_idx,
+      title = "Time-Dependent ROC Curve - Training Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No ROC curve available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for timeROC plot - Training
+output$download_timeROC_learning <- downloadHandler(
+  filename = function() { paste('timeROC_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+      n_times <- length(temporal_metrics$detailed_results)
+      median_idx <- ceiling(n_times / 2)
+
+      p <- plot_timeROC_curve(
+        temporal_metrics$timeROC_obj,
+        time_point_index = median_idx,
+        title = "Time-Dependent ROC Curve - Training Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 8, height = 8)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot timeROC curve - Validation Set
+output$plot_timeROC_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+    # Get median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    p <- plot_timeROC_curve(
+      temporal_metrics$timeROC_obj,
+      time_point_index = median_idx,
+      title = "Time-Dependent ROC Curve - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No ROC curve available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for timeROC plot - Validation
+output$download_timeROC_validation <- downloadHandler(
+  filename = function() { paste('timeROC_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+      n_times <- length(temporal_metrics$detailed_results)
+      median_idx <- ceiling(n_times / 2)
+
+      p <- plot_timeROC_curve(
+        temporal_metrics$timeROC_obj,
+        time_point_index = median_idx,
+        title = "Time-Dependent ROC Curve - Validation Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 8, height = 8)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot risk scatter with Youden threshold - Training Set
+output$plot_scatter_youden_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(temporal_metrics) && !is.null(datalearningmodel)){
+    p <- plot_risk_density_with_threshold(
+      temporal_metrics,
+      title = "Risk Score Distribution - Training Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No scatter plot available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for scatter plot - Training
+output$download_scatter_learning <- downloadHandler(
+  filename = function() { paste('scatter_youden_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+    if(!is.null(temporal_metrics) && !is.null(datalearningmodel)){
+      p <- plot_risk_density_with_threshold(
+        temporal_metrics,
+        title = "Risk Score Distribution - Training Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot risk scatter with Youden threshold - Validation Set
+output$plot_scatter_youden_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(temporal_metrics) && !is.null(datavalidationmodel)){
+    p <- plot_risk_density_with_threshold(
+      temporal_metrics,
+      title = "Risk Score Distribution - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No scatter plot available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for scatter plot - Validation
+output$download_scatter_validation <- downloadHandler(
+  filename = function() { paste('scatter_youden_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+    if(!is.null(temporal_metrics) && !is.null(datavalidationmodel)){
+      p <- plot_risk_density_with_threshold(
+        temporal_metrics,
+        title = "Risk Score Distribution - Validation Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Download complete classification results (reuse existing function)
+output$download_classif_complete <- downloadHandler(
+  filename = function() { paste('survival_classif_results_', Sys.Date(), '.xlsx', sep='') },
+  content = function(file) {
+    # Get model info
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+    if(!is.null(model) && inherits(model, "ranger")){
+      model_type <- "rsf"
+    } else if(!is.null(model) && inherits(model, "cv.glmnet")){
+      model_type <- "coxnet"
+    }
+
+    model_info <- list(
+      model_type = model_type,
+      date = Sys.Date()
+    )
+
+    # Export results
+    export_survival_results(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      model_info = model_info,
+      filename = file
+    )
+  },
+  contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# Download classification CSV (reuse existing function)
+output$download_classif_csv <- downloadHandler(
+  filename = function() { paste('survival_classif_metrics_', Sys.Date(), '.csv', sep='') },
+  content = function(file) {
+    export_results_csv(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      filename = file
+    )
+  },
+  contentType = "text/csv"
+)
+
+})
 
 # 
