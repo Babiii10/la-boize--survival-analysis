@@ -41,6 +41,7 @@ usePackage("ranger")#for Random Survival Forest
 usePackage("riskRegression")#for C-index and prediction metrics
 usePackage("pec")#for prediction error curves and Brier score
 usePackage("prodlim")#for product limit estimation (required by pec)
+usePackage("timeROC")#for time-dependent ROC curves with censoring
 usePackage("xgboost")#for xgboost gradient boosting
 usePackage("lightgbm")#for lightgbm gradient boosting
 usePackage("class")#for k-nearest neighbors
@@ -631,6 +632,7 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
 }
 
 # Calculate temporal classification metrics across multiple time points
+# Uses timeROC package for proper AUC calculation with censoring
 calculate_temporal_metrics <- function(model, data, time_col = "time", status_col = "status",
                                        time_points = NULL, model_type = "cox"){
   tryCatch({
@@ -643,20 +645,46 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
                         length.out = 10)
     }
 
-    # Get survival predictions for all time points
-    surv_matrix <- get_survival_predictions(model, data, time_points, model_type)
+    # Get risk scores for timeROC
+    # For survival models, we need a continuous risk score
+    risk_scores <- get_risk_scores(model, data, model_type)
 
-    if(is.null(surv_matrix)){
+    if(is.null(risk_scores) || length(risk_scores) == 0){
+      warning("Could not extract risk scores from model")
       return(NULL)
     }
 
-    # Calculate metrics for each time point
+    # Calculate time-dependent AUC using timeROC
+    # This properly handles censoring
+    timeROC_obj <- timeROC(
+      T = data[[time_col]],           # observed time
+      delta = data[[status_col]],     # event indicator (0=censored, 1=event)
+      marker = risk_scores,           # prognostic marker (higher = higher risk)
+      cause = 1,                      # cause of interest
+      weighting = "marginal",         # inverse probability weighting method
+      times = time_points,            # time points for evaluation
+      iid = FALSE                     # don't compute influence functions (faster)
+    )
+
+    # Extract AUC values at each time point
+    auc_values <- timeROC_obj$AUC
+
+    # Get survival predictions for sensitivity/specificity calculation
+    surv_matrix <- get_survival_predictions(model, data, time_points, model_type)
+
+    if(is.null(surv_matrix)){
+      warning("Could not get survival predictions")
+      return(NULL)
+    }
+
+    # Calculate sensitivity/specificity with Youden threshold for each time point
     results_list <- list()
 
     for(j in 1:length(time_points)){
       t <- time_points[j]
       surv_probs <- surv_matrix[, j]
 
+      # Get detailed metrics (sensitivity, specificity, threshold)
       metrics <- calculate_classification_metrics_at_time(
         surv_probs = surv_probs,
         actual_time = data[[time_col]],
@@ -664,23 +692,29 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
         eval_time = t
       )
 
+      # Replace manual AUC with timeROC AUC (more robust)
+      if(!is.null(metrics)){
+        metrics$auc <- auc_values[j]
+      }
+
       results_list[[j]] <- metrics
     }
 
     # Compile into data frame
     metrics_df <- data.frame(
-      time = sapply(results_list, function(x) x$time),
-      AUC = sapply(results_list, function(x) x$auc),
-      Sensitivity = sapply(results_list, function(x) x$sensitivity),
-      Specificity = sapply(results_list, function(x) x$specificity),
-      Threshold = sapply(results_list, function(x) x$threshold),
-      N_patients = sapply(results_list, function(x) x$n_patients),
-      N_excluded = sapply(results_list, function(x) x$n_excluded)
+      time = time_points,
+      AUC = auc_values,
+      Sensitivity = sapply(results_list, function(x) if(!is.null(x)) x$sensitivity else NA),
+      Specificity = sapply(results_list, function(x) if(!is.null(x)) x$specificity else NA),
+      Threshold = sapply(results_list, function(x) if(!is.null(x)) x$threshold else NA),
+      N_patients = sapply(results_list, function(x) if(!is.null(x)) x$n_patients else NA),
+      N_excluded = sapply(results_list, function(x) if(!is.null(x)) x$n_excluded else NA)
     )
 
     return(list(
       metrics_df = metrics_df,
-      detailed_results = results_list
+      detailed_results = results_list,
+      timeROC_obj = timeROC_obj  # Store timeROC object for advanced usage
     ))
 
   }, error = function(e) {
@@ -723,6 +757,50 @@ plot_temporal_classification_metrics <- function(temporal_metrics, title = "Time
 
   }, error = function(e) {
     warning(paste("Error plotting temporal metrics:", e$message))
+    return(NULL)
+  })
+}
+
+# Plot time-dependent ROC curve at a specific time using timeROC object
+plot_timeROC_curve <- function(timeROC_obj, time_point_idx = 1, title = NULL){
+  tryCatch({
+    if(is.null(timeROC_obj)){
+      return(NULL)
+    }
+
+    # Get FP and TP rates for the specified time
+    FP <- timeROC_obj$FP[, time_point_idx]
+    TP <- timeROC_obj$TP[, time_point_idx]
+    time_value <- timeROC_obj$times[time_point_idx]
+    auc_value <- timeROC_obj$AUC[time_point_idx]
+
+    # Create data frame
+    roc_data <- data.frame(FPR = FP, TPR = TP)
+
+    # Create title if not provided
+    if(is.null(title)){
+      title <- paste0("Time-Dependent ROC Curve at t = ", round(time_value, 2),
+                     "\nAUC = ", round(auc_value, 3))
+    }
+
+    # Create plot
+    p <- ggplot(roc_data, aes(x = FPR, y = TPR)) +
+      geom_line(color = "#E7B800", size = 1.2) +
+      geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50") +
+      theme_minimal() +
+      labs(title = title,
+           x = "False Positive Rate (1 - Specificity)",
+           y = "True Positive Rate (Sensitivity)") +
+      xlim(0, 1) + ylim(0, 1) +
+      coord_equal() +
+      theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+            axis.title = element_text(size = 12),
+            axis.text = element_text(size = 10))
+
+    return(p)
+
+  }, error = function(e) {
+    warning(paste("Error plotting timeROC curve:", e$message))
     return(NULL)
   })
 }
