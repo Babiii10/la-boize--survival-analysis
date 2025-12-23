@@ -798,6 +798,16 @@ shinyUI(fluidPage(
                                                                                                     tableOutput("table_temporal_metrics_validation")
                                                                                                 )
                                                                                          )
+                                                                                       ),
+                                                                                       hr(),
+                                                                                       h4("Export Complete Results"),
+                                                                                       fluidRow(
+                                                                                         column(12,
+                                                                                                p("Download comprehensive results including all temporal metrics, confusion matrices, and model information:"),
+                                                                                                p(downloadButton("download_complete_results","Download Excel Report (.xlsx)"),
+                                                                                                  downloadButton("download_temporal_csv","Download CSV (Temporal Metrics)"),
+                                                                                                  align="center")
+                                                                                         )
                                                                                        )
                                                                       )
                                                      )

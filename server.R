@@ -1349,8 +1349,17 @@ output$table_temporal_metrics_learning <- renderTable({
     metrics_df$Specificity <- round(metrics_df$Specificity, 3)
     metrics_df$Threshold <- round(metrics_df$Threshold, 3)
 
-    # Reorder columns for better display
-    metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    # Include confidence intervals if available
+    if("AUC_CI_lower" %in% colnames(metrics_df)){
+      metrics_df$AUC_CI_lower <- round(metrics_df$AUC_CI_lower, 3)
+      metrics_df$AUC_CI_upper <- round(metrics_df$AUC_CI_upper, 3)
+      # Create AUC_CI column for better display
+      metrics_df$AUC_95CI <- paste0("[", metrics_df$AUC_CI_lower, ", ", metrics_df$AUC_CI_upper, "]")
+      # Reorder columns
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "AUC_95CI", "Sensitivity", "Specificity", "Threshold")]
+    } else {
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    }
 
     return(metrics_df)
   } else {
@@ -1423,6 +1432,7 @@ output$survival_stats_learning <- renderTable({
 # ===============================
 
 # Calculate and store temporal metrics for validation set
+# CRITICAL: Uses thresholds from TRAINING set (not recalculated)
 temporal_metrics_validation <- reactive({
   datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
 
@@ -1438,13 +1448,28 @@ temporal_metrics_validation <- reactive({
       }
     }
 
+    # Get training metrics to extract thresholds and time points
+    training_metrics <- temporal_metrics_learning()
+
+    # Extract thresholds and time points from training set
+    training_thresholds <- NULL
+    training_time_points <- NULL
+
+    if(!is.null(training_metrics)){
+      training_thresholds <- training_metrics$thresholds
+      training_time_points <- training_metrics$time_points
+    }
+
+    # Calculate validation metrics using TRAINING thresholds
     temporal_results <- calculate_temporal_metrics(
       model = model,
       data = datavalidationmodel$validationmodel,
       time_col = "time",
       status_col = "status",
-      time_points = NULL,
-      model_type = model_type
+      time_points = training_time_points,  # Use same time points as training
+      model_type = model_type,
+      training_thresholds = training_thresholds,  # Apply training thresholds
+      compute_ci = TRUE  # Compute CI for validation AUC
     )
 
     return(temporal_results)
@@ -1499,8 +1524,17 @@ output$table_temporal_metrics_validation <- renderTable({
     metrics_df$Specificity <- round(metrics_df$Specificity, 3)
     metrics_df$Threshold <- round(metrics_df$Threshold, 3)
 
-    # Reorder columns for better display
-    metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    # Include confidence intervals if available
+    if("AUC_CI_lower" %in% colnames(metrics_df)){
+      metrics_df$AUC_CI_lower <- round(metrics_df$AUC_CI_lower, 3)
+      metrics_df$AUC_CI_upper <- round(metrics_df$AUC_CI_upper, 3)
+      # Create AUC_CI column for better display
+      metrics_df$AUC_95CI <- paste0("[", metrics_df$AUC_CI_lower, ", ", metrics_df$AUC_CI_upper, "]")
+      # Reorder columns - NOTE: Threshold is from TRAINING set
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "AUC_95CI", "Sensitivity", "Specificity", "Threshold")]
+    } else {
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    }
 
     return(metrics_df)
   } else {
@@ -1530,6 +1564,48 @@ output$confusion_matrix_validation <- renderTable({
   }
   return(NULL)
 }, include.rownames = FALSE)
+
+# Download comprehensive results as Excel
+output$download_complete_results <- downloadHandler(
+  filename = function() { paste('survival_results_', Sys.Date(), '.xlsx', sep='') },
+  content = function(file) {
+    # Get model info
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+    if(!is.null(model) && inherits(model, "ranger")){
+      model_type <- "rsf"
+    } else if(!is.null(model) && inherits(model, "cv.glmnet")){
+      model_type <- "coxnet"
+    }
+
+    model_info <- list(
+      model_type = model_type,
+      date = Sys.Date()
+    )
+
+    # Export results
+    export_survival_results(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      model_info = model_info,
+      filename = file
+    )
+  },
+  contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# Download temporal metrics as CSV
+output$download_temporal_csv <- downloadHandler(
+  filename = function() { paste('temporal_metrics_', Sys.Date(), '.csv', sep='') },
+  content = function(file) {
+    export_results_csv(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      filename = file
+    )
+  },
+  contentType = "text/csv"
+)
 
 # Display survival statistics - validation
 output$survival_stats_validation <- renderTable({

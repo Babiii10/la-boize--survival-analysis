@@ -633,16 +633,33 @@ calculate_classification_metrics_at_time <- function(surv_probs, actual_time, ac
 
 # Calculate temporal classification metrics across multiple time points
 # Uses timeROC package for proper AUC calculation with censoring
+# If training_thresholds provided, uses them instead of recalculating (for validation)
+# max_time_points: limit number of time points for performance (default 10, max 20)
 calculate_temporal_metrics <- function(model, data, time_col = "time", status_col = "status",
-                                       time_points = NULL, model_type = "cox"){
+                                       time_points = NULL, model_type = "cox",
+                                       training_thresholds = NULL, compute_ci = TRUE,
+                                       max_time_points = 10){
   tryCatch({
     if(is.null(time_points)){
       # Use quantiles of observed event times
-      max_time <- max(data[[time_col]], na.rm = TRUE)
+      # Limit number of time points for performance
+      max_time_points <- min(max_time_points, 20)  # Cap at 20 for performance
+      max_time_points <- max(max_time_points, 5)   # Minimum 5 for meaningful analysis
+
+      # Auto-adjust for large datasets
+      n_samples <- nrow(data)
+      if(n_samples > 1000 && max_time_points > 8){
+        max_time_points <- 8
+        message("Large dataset detected (n=", n_samples, "). Reducing to ", max_time_points, " time points for performance.")
+      } else if(n_samples > 500 && max_time_points > 10){
+        max_time_points <- 10
+        message("Medium dataset detected (n=", n_samples, "). Using ", max_time_points, " time points.")
+      }
+
       event_times <- data[data[[status_col]] == 1, time_col]
       time_points <- seq(from = quantile(event_times, 0.1, na.rm = TRUE),
                         to = quantile(event_times, 0.9, na.rm = TRUE),
-                        length.out = 10)
+                        length.out = max_time_points)
     }
 
     # Get risk scores for timeROC
@@ -663,11 +680,24 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
       cause = 1,                      # cause of interest
       weighting = "marginal",         # inverse probability weighting method
       times = time_points,            # time points for evaluation
-      iid = FALSE                     # don't compute influence functions (faster)
+      iid = compute_ci                # compute influence functions for CI (slower but more informative)
     )
 
     # Extract AUC values at each time point
     auc_values <- timeROC_obj$AUC
+
+    # Extract confidence intervals if computed
+    auc_ci_lower <- NULL
+    auc_ci_upper <- NULL
+    if(compute_ci && !is.null(timeROC_obj$inference)){
+      # 95% CI using normal approximation
+      auc_se <- timeROC_obj$inference$vect_sd_1  # Standard errors
+      auc_ci_lower <- auc_values - 1.96 * auc_se
+      auc_ci_upper <- auc_values + 1.96 * auc_se
+      # Bound between 0 and 1
+      auc_ci_lower <- pmax(0, pmin(1, auc_ci_lower))
+      auc_ci_upper <- pmax(0, pmin(1, auc_ci_upper))
+    }
 
     # Get survival predictions for sensitivity/specificity calculation
     surv_matrix <- get_survival_predictions(model, data, time_points, model_type)
@@ -679,22 +709,32 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
 
     # Calculate sensitivity/specificity with Youden threshold for each time point
     results_list <- list()
+    is_validation <- !is.null(training_thresholds)
 
     for(j in 1:length(time_points)){
       t <- time_points[j]
       surv_probs <- surv_matrix[, j]
+
+      # Use training threshold if provided (VALIDATION SET)
+      # Otherwise calculate optimal threshold (TRAINING SET)
+      threshold_to_use <- if(is_validation) training_thresholds[j] else NULL
 
       # Get detailed metrics (sensitivity, specificity, threshold)
       metrics <- calculate_classification_metrics_at_time(
         surv_probs = surv_probs,
         actual_time = data[[time_col]],
         actual_status = data[[status_col]],
-        eval_time = t
+        eval_time = t,
+        threshold = threshold_to_use  # NULL for train (calculate), value for validation (apply)
       )
 
       # Replace manual AUC with timeROC AUC (more robust)
       if(!is.null(metrics)){
         metrics$auc <- auc_values[j]
+        if(compute_ci){
+          metrics$auc_ci_lower <- if(!is.null(auc_ci_lower)) auc_ci_lower[j] else NA
+          metrics$auc_ci_upper <- if(!is.null(auc_ci_upper)) auc_ci_upper[j] else NA
+        }
       }
 
       results_list[[j]] <- metrics
@@ -711,10 +751,18 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
       N_excluded = sapply(results_list, function(x) if(!is.null(x)) x$n_excluded else NA)
     )
 
+    # Add confidence intervals if computed
+    if(compute_ci && !is.null(auc_ci_lower)){
+      metrics_df$AUC_CI_lower <- auc_ci_lower
+      metrics_df$AUC_CI_upper <- auc_ci_upper
+    }
+
     return(list(
       metrics_df = metrics_df,
       detailed_results = results_list,
-      timeROC_obj = timeROC_obj  # Store timeROC object for advanced usage
+      timeROC_obj = timeROC_obj,  # Store timeROC object for advanced usage
+      time_points = time_points,   # Store time points for validation reuse
+      thresholds = metrics_df$Threshold  # Store thresholds for validation reuse
     ))
 
   }, error = function(e) {
@@ -724,7 +772,8 @@ calculate_temporal_metrics <- function(model, data, time_col = "time", status_co
 }
 
 # Plot temporal evolution of classification metrics
-plot_temporal_classification_metrics <- function(temporal_metrics, title = "Time-Dependent Classification Metrics"){
+plot_temporal_classification_metrics <- function(temporal_metrics, title = "Time-Dependent Classification Metrics",
+                                                  show_ci = TRUE){
   tryCatch({
     if(is.null(temporal_metrics) || is.null(temporal_metrics$metrics_df)){
       return(NULL)
@@ -732,16 +781,29 @@ plot_temporal_classification_metrics <- function(temporal_metrics, title = "Time
 
     metrics_df <- temporal_metrics$metrics_df
 
+    # Check if CI available
+    has_ci <- "AUC_CI_lower" %in% colnames(metrics_df) && "AUC_CI_upper" %in% colnames(metrics_df)
+
     # Reshape for ggplot
     metrics_long <- reshape2::melt(metrics_df, id.vars = "time",
                                    measure.vars = c("AUC", "Sensitivity", "Specificity"),
                                    variable.name = "Metric", value.name = "Value")
 
-    # Create plot
+    # Create base plot
     p <- ggplot(metrics_long, aes(x = time, y = Value, color = Metric, group = Metric)) +
       geom_line(size = 1.2) +
       geom_point(size = 2.5) +
-      scale_color_manual(values = c("AUC" = "#E7B800", "Sensitivity" = "#2E9FDF", "Specificity" = "#FC4E07")) +
+      scale_color_manual(values = c("AUC" = "#E7B800", "Sensitivity" = "#2E9FDF", "Specificity" = "#FC4E07"))
+
+    # Add confidence interval ribbon for AUC if available
+    if(has_ci && show_ci){
+      p <- p + geom_ribbon(data = metrics_df,
+                          aes(x = time, ymin = AUC_CI_lower, ymax = AUC_CI_upper),
+                          fill = "#E7B800", alpha = 0.2, inherit.aes = FALSE)
+    }
+
+    # Add theme and labels
+    p <- p +
       theme_minimal() +
       labs(title = title,
            x = "Time",
@@ -802,6 +864,109 @@ plot_timeROC_curve <- function(timeROC_obj, time_point_idx = 1, title = NULL){
   }, error = function(e) {
     warning(paste("Error plotting timeROC curve:", e$message))
     return(NULL)
+  })
+}
+
+##########################
+# Export Helper Functions for Survival Analysis
+##########################
+
+# Export comprehensive results to Excel workbook
+export_survival_results <- function(temporal_metrics_learning, temporal_metrics_validation = NULL,
+                                    model_info = NULL, filename = "survival_results.xlsx"){
+  tryCatch({
+    require(writexl)
+
+    # Create list of sheets
+    sheets_list <- list()
+
+    # Sheet 1: Learning Set Temporal Metrics
+    if(!is.null(temporal_metrics_learning) && !is.null(temporal_metrics_learning$metrics_df)){
+      sheets_list$Learning_Temporal_Metrics <- temporal_metrics_learning$metrics_df
+    }
+
+    # Sheet 2: Validation Set Temporal Metrics
+    if(!is.null(temporal_metrics_validation) && !is.null(temporal_metrics_validation$metrics_df)){
+      sheets_list$Validation_Temporal_Metrics <- temporal_metrics_validation$metrics_df
+    }
+
+    # Sheet 3: Confusion Matrices (Learning)
+    if(!is.null(temporal_metrics_learning) && !is.null(temporal_metrics_learning$detailed_results)){
+      # Get median time point confusion matrix
+      n_times <- length(temporal_metrics_learning$detailed_results)
+      median_idx <- ceiling(n_times / 2)
+      result_median <- temporal_metrics_learning$detailed_results[[median_idx]]
+
+      if(!is.null(result_median) && !is.null(result_median$confusion_matrix)){
+        cm <- result_median$confusion_matrix
+        cm_df <- as.data.frame.matrix(cm)
+        cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+        cm_df$Time <- round(result_median$time, 2)
+        cm_df$Dataset <- "Learning"
+        sheets_list$Confusion_Matrices <- cm_df
+      }
+    }
+
+    # Sheet 4: Model Information
+    if(!is.null(model_info)){
+      sheets_list$Model_Info <- model_info
+    }
+
+    # Sheet 5: Metadata
+    metadata <- data.frame(
+      Item = c("Export Date", "Export Time", "R Version", "Application", "Format Version"),
+      Value = c(Sys.Date(), format(Sys.time(), "%H:%M:%S"), R.version.string,
+                "Survival Analysis Hybrid App", "1.0")
+    )
+    sheets_list$Metadata <- metadata
+
+    # Write to Excel
+    write_xlsx(sheets_list, filename)
+
+    return(TRUE)
+
+  }, error = function(e) {
+    warning(paste("Error exporting results:", e$message))
+    return(FALSE)
+  })
+}
+
+# Export results to CSV (single file with all metrics)
+export_results_csv <- function(temporal_metrics_learning, temporal_metrics_validation = NULL,
+                                filename = "temporal_metrics.csv"){
+  tryCatch({
+    # Combine learning and validation metrics
+    df_combined <- NULL
+
+    if(!is.null(temporal_metrics_learning) && !is.null(temporal_metrics_learning$metrics_df)){
+      df_learning <- temporal_metrics_learning$metrics_df
+      df_learning$Dataset <- "Learning"
+      df_combined <- df_learning
+    }
+
+    if(!is.null(temporal_metrics_validation) && !is.null(temporal_metrics_validation$metrics_df)){
+      df_validation <- temporal_metrics_validation$metrics_df
+      df_validation$Dataset <- "Validation"
+
+      if(!is.null(df_combined)){
+        # Ensure same columns
+        common_cols <- intersect(colnames(df_combined), colnames(df_validation))
+        df_combined <- rbind(df_combined[, common_cols], df_validation[, common_cols])
+      } else {
+        df_combined <- df_validation
+      }
+    }
+
+    if(!is.null(df_combined)){
+      write.csv(df_combined, filename, row.names = FALSE)
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
+
+  }, error = function(e) {
+    warning(paste("Error exporting CSV:", e$message))
+    return(FALSE)
   })
 }
 
