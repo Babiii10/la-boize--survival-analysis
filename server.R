@@ -324,8 +324,14 @@ SELECTDATA<-reactive({
            need(input$thresholdNAstructure>0,input$thresholdNAstructure<1,"threshold of the pvalue has to be between 0 and 1"))
   learning<<-DATA()$LEARNING
   validate(need(input$confirmdatabutton!=0,"Importation of datas has to be confirmed"))
-  
-  validate(need(length(levels(learning[,1]))==2,"number of groups is not equal to 2"))
+
+  # Validate survival data structure (time and status columns)
+  validate(
+    need("time" %in% colnames(learning), "Data must contain a 'time' column"),
+    need("status" %in% colnames(learning), "Data must contain a 'status' column"),
+    need(is.numeric(learning$time), "Time column must be numeric"),
+    need(all(learning$status %in% c(0, 1, NA)), "Status column must contain only 0 (censored) or 1 (event)")
+  )
   resselectdata<<-selectdatafunction(learning = learning,selectdataparameters = selectdataparameters)
   list(LEARNINGSELECT=resselectdata$learningselect,STRUCTUREDFEATURES=resselectdata$structuredfeatures,DATASTRUCTUREDFEATURES=resselectdata$datastructuredfeatures,selectdataparameters)
 })
@@ -1075,7 +1081,29 @@ output$downloaddatalearning <- downloadHandler(
 
 output$plotmodeldecouvroc <- renderPlot({
   datalearningmodel<<-MODEL()$DATALEARNINGMODEL
-  ROCcurve(validation = datalearningmodel$reslearningmodel$classlearning,decisionvalues =  datalearningmodel$reslearningmodel$scorelearning)
+  if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+    # Create risk groups based on median risk score
+    risk_scores <- datalearningmodel$reslearningmodel$riskscores
+    risk_groups <- ifelse(risk_scores >= median(risk_scores, na.rm = TRUE), "High risk", "Low risk")
+
+    # Plot Kaplan-Meier curve
+    km_plot <- plot_kaplan_meier(
+      time = datalearningmodel$learningmodel$time,
+      status = datalearningmodel$learningmodel$status,
+      risk_groups = risk_groups,
+      title = "Kaplan-Meier Curve - Learning Set",
+      show_risk_table = TRUE,
+      show_conf_int = TRUE
+    )
+
+    # Return the plot
+    if(!is.null(km_plot)){
+      print(km_plot)
+    }
+  } else {
+    # Fallback: simple plot if no risk scores
+    plot(1, type = "n", main = "No model available", xlab = "", ylab = "")
+  }
 })
 output$youndendecouv<-renderTable({
   datalearningmodel<<-MODEL()$DATALEARNINGMODEL
@@ -1126,14 +1154,33 @@ output$tabmodeldecouv<-renderTable({
   as.data.frame.matrix(table(datalearningmodel$reslearningmodel$predictclasslearning,datalearningmodel$reslearningmodel$classlearning ))
 },include.rownames=TRUE)
 
-output$sensibilitydecouv<-renderText({
+output$cindexdecouv<-renderText({
   datalearningmodel<-MODEL()$DATALEARNINGMODEL
-  sensibility(predict = datalearningmodel$reslearningmodel$predictclasslearning,class = datalearningmodel$reslearningmodel$classlearning)
+  if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+    cindex <- calculate_cindex(predicted_risk = datalearningmodel$reslearningmodel$riskscores,
+                               time = datalearningmodel$learningmodel$time,
+                               status = datalearningmodel$learningmodel$status)
+    round(cindex, 3)
+  } else {
+    "N/A"
+  }
 })
 
-output$specificitydecouv<-renderText({
+output$ibsdecouv<-renderText({
   datalearningmodel<-MODEL()$DATALEARNINGMODEL
-  specificity(predict = datalearningmodel$reslearningmodel$predictclasslearning,class = datalearningmodel$reslearningmodel$classlearning )
+  if(!is.null(MODEL()$MODEL)){
+    tryCatch({
+      ibs <- calculate_ibs(model = MODEL()$MODEL,
+                          data = datalearningmodel$learningmodel,
+                          time_col = "time",
+                          status_col = "status")
+      round(ibs, 3)
+    }, error = function(e) {
+      "N/A"
+    })
+  } else {
+    "N/A"
+  }
 })
 
 
@@ -1145,7 +1192,29 @@ output$downloaddatavalidation <- downloadHandler(
 
 output$plotmodelvalroc <- renderPlot({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
-  ROCcurve(validation =  datavalidationmodel$resvalidationmodel$classval,decisionvalues =  datavalidationmodel$resvalidationmodel$scoreval)
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    # Create risk groups based on median risk score
+    risk_scores <- datavalidationmodel$resvalidationmodel$riskscores
+    risk_groups <- ifelse(risk_scores >= median(risk_scores, na.rm = TRUE), "High risk", "Low risk")
+
+    # Plot Kaplan-Meier curve
+    km_plot <- plot_kaplan_meier(
+      time = datavalidationmodel$validationmodel$time,
+      status = datavalidationmodel$validationmodel$status,
+      risk_groups = risk_groups,
+      title = "Kaplan-Meier Curve - Validation Set",
+      show_risk_table = TRUE,
+      show_conf_int = TRUE
+    )
+
+    # Return the plot
+    if(!is.null(km_plot)){
+      print(km_plot)
+    }
+  } else {
+    # Fallback: simple plot if no validation data
+    plot(1, type = "n", main = "No validation data available", xlab = "", ylab = "")
+  }
 })
 
 output$downloadplotvalroc = downloadHandler(
@@ -1192,13 +1261,33 @@ output$tabmodelval<-renderTable({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
   as.data.frame.matrix(table(datavalidationmodel$resvalidationmodel$predictclassval, datavalidationmodel$resvalidationmodel$classval))
 },include.rownames=TRUE)
-output$sensibilityval<-renderText({
+output$cindexval<-renderText({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
-  sensibility(predict = datavalidationmodel$resvalidationmodel$predictclassval,class = datavalidationmodel$resvalidationmodel$classval)
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    cindex <- calculate_cindex(predicted_risk = datavalidationmodel$resvalidationmodel$riskscores,
+                               time = datavalidationmodel$validationmodel$time,
+                               status = datavalidationmodel$validationmodel$status)
+    round(cindex, 3)
+  } else {
+    "N/A"
+  }
 })
-output$specificityval<-renderText({
+
+output$ibsval<-renderText({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
-  specificity(predict = datavalidationmodel$resvalidationmodel$predictclassval,class =  datavalidationmodel$resvalidationmodel$classval)
+  if(!is.null(datavalidationmodel) && !is.null(MODEL()$MODEL)){
+    tryCatch({
+      ibs <- calculate_ibs(model = MODEL()$MODEL,
+                          data = datavalidationmodel$validationmodel,
+                          time_col = "time",
+                          status_col = "status")
+      round(ibs, 3)
+    }, error = function(e) {
+      "N/A"
+    })
+  } else {
+    "N/A"
+  }
 })
 ####Detail of the model
 output$summarymodel<-renderPrint({
