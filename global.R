@@ -1184,12 +1184,52 @@ diffexptest<-function(toto,test="Wtest"){
   #expressed according to the first variable (first column)
   #For binary classification: Wilcoxon/Student test
   #For multi-class: Kruskal-Wallis/ANOVA test
+  #For survival: Log-rank test (univariate) or Cox Wald test (univariate)
   #test= Ttest: Student test (parametric), Wtest: Wilcoxon (nonparametric)
   #      Kruskal: Kruskal-Wallis (multi-class nonparametric), ANOVA: ANOVA (multi-class parametric)
+  #      logrank: Log-rank test (survival univariate), coxwald: Cox Wald test (survival univariate)
 
-  group<-toto[,1]
-  toto<-toto[,-1]
-  n_classes <- length(levels(group))
+  # Check if this is survival data (time and status columns)
+  is_survival <- all(c("time", "status") %in% colnames(toto))
+
+  if(is_survival && test %in% c("logrank", "coxwald")){
+    # SURVIVAL ANALYSIS - New code
+    cat(paste("Performing", test, "test for survival data...\n"))
+
+    if(test == "logrank"){
+      results <- perform_logrank_test(data = toto, time_col = "time", status_col = "status")
+
+      listgen <- data.frame(
+        name = results$variable,
+        pval = results$pvalue,
+        BHadjustpval = p.adjust(results$pvalue, method = "BH"),
+        chisq = results$chisq
+      )
+      colnames(listgen) <- c("name", "pval_logrank", "BHadjustpval_logrank", "chisq")
+
+    } else if(test == "coxwald"){
+      results <- perform_cox_univariate(data = toto, time_col = "time", status_col = "status")
+
+      listgen <- data.frame(
+        name = results$variable,
+        pval = results$pvalue,
+        BHadjustpval = p.adjust(results$pvalue, method = "BH"),
+        hazard_ratio = results$hazard_ratio,
+        HR_lower_95 = results$HR_lower_95,
+        HR_upper_95 = results$HR_upper_95,
+        coefficient = results$coefficient
+      )
+      colnames(listgen) <- c("name", "pval_coxwald", "BHadjustpval_coxwald",
+                            "Hazard_Ratio", "HR_lower_95", "HR_upper_95", "Coefficient")
+    }
+
+    return(listgen)
+
+  } else {
+    # CLASSIFICATION ANALYSIS - Original code
+    group<-toto[,1]
+    toto<-toto[,-1]
+    n_classes <- length(levels(group))
 
   # Detect if binary or multi-class
   if(n_classes == 2){
@@ -1297,6 +1337,7 @@ diffexptest<-function(toto,test="Wtest"){
 
     return(listgen)
   }
+  }  # End of classification else
 }
 
 younden<-function(response,predictor){
@@ -2167,16 +2208,112 @@ modelfunction <- function(learningmodel,
                           datastructuresfeatures=NULL,
                           learningselect){
   if(modelparameters$modeltype!="nomodel"){
-    colnames(learningmodel)[1]<-"group"
-    
-    if(modelparameters$invers){
-      learningmodel[,1]<-factor(learningmodel[,1],levels = rev(levels(learningmodel[,1])),ordered = TRUE)
+
+    # Check if this is a survival model or classification model
+    is_survival_model <- modelparameters$modeltype %in% c("rsf", "cox", "coxlasso", "coxelasticnet", "coxridge")
+
+    if(is_survival_model){
+      # For survival models: expect time and status columns
+      if(!("time" %in% colnames(learningmodel)) || !("status" %in% colnames(learningmodel))){
+        stop("Survival models require 'time' and 'status' columns in data")
+      }
+    } else {
+      # For classification models: expect group column
+      colnames(learningmodel)[1]<-"group"
+
+      if(modelparameters$invers){
+        learningmodel[,1]<-factor(learningmodel[,1],levels = rev(levels(learningmodel[,1])),ordered = TRUE)
+      }
+      lev<-levels(x = learningmodel[,1])
+      names(lev)<-c("positif","negatif")
     }
-    lev<-levels(x = learningmodel[,1])
-    names(lev)<-c("positif","negatif")
-    
-    #Build model
-    if (modelparameters$modeltype=="randomforest"){
+
+    #Build model - SURVIVAL MODELS
+    if(modelparameters$modeltype == "rsf"){
+      # Random Survival Forest
+      cat("Building Random Survival Forest model...\n")
+
+      ntree_param <- ifelse(is.null(modelparameters$ntree), 500, modelparameters$ntree)
+
+      # Determine mtry parameter
+      n_features <- ncol(learningmodel) - 2  # Exclude time and status
+
+      if(is.null(modelparameters$autotunerf) || modelparameters$autotunerf){
+        cat("Auto-tuning RSF hyperparameters...\n")
+        # Use tuning function
+        model <- tune_rsf_model(data = learningmodel,
+                               time_col = "time",
+                               status_col = "status",
+                               ntree_values = c(100, 500, ntree_param),
+                               mtry_values = c(floor(sqrt(n_features)), floor(n_features/3), floor(n_features/2)),
+                               nodesize_values = c(3, 5, 10))
+
+        optimal_mtry <- if(!is.null(model$best_params)) model$best_params$mtry else floor(sqrt(n_features))
+      } else {
+        # Use manual parameters
+        optimal_mtry <- ifelse(is.null(modelparameters$mtry), floor(sqrt(n_features)), modelparameters$mtry)
+
+        model <- fit_rsf_model(data = learningmodel,
+                              time_col = "time",
+                              status_col = "status",
+                              num_trees = ntree_param,
+                              mtry = optimal_mtry,
+                              min_node_size = 5)
+      }
+
+      # Extract risk scores
+      riskscores <- get_risk_scores(model, learningmodel, model_type = "rsf")
+
+      # No predictclass or scorelearning for survival models
+      # Store results in survival-compatible format
+      scorelearning <- data.frame(risk_score = riskscores)
+      predictclasslearning <- NULL  # No classification in survival
+      classlearning <- NULL
+
+    } else if(modelparameters$modeltype == "cox"){
+      # Cox Proportional Hazards
+      cat("Building Cox Proportional Hazards model...\n")
+
+      model <- fit_cox_model(data = learningmodel,
+                            time_col = "time",
+                            status_col = "status")
+
+      # Extract risk scores
+      riskscores <- get_risk_scores(model, learningmodel, model_type = "cox")
+
+      scorelearning <- data.frame(risk_score = riskscores)
+      predictclasslearning <- NULL
+      classlearning <- NULL
+
+    } else if(modelparameters$modeltype %in% c("coxlasso", "coxelasticnet", "coxridge")){
+      # Penalized Cox models
+      cat(paste("Building", modelparameters$modeltype, "model...\n"))
+
+      # Determine alpha
+      alpha <- switch(modelparameters$modeltype,
+                     "coxlasso" = 1,
+                     "coxelasticnet" = ifelse(is.null(modelparameters$alpha), 0.5, modelparameters$alpha),
+                     "coxridge" = 0)
+
+      model <- fit_coxnet_model(data = learningmodel,
+                               time_col = "time",
+                               status_col = "status",
+                               alpha = alpha,
+                               nfolds = 10)
+
+      # Extract risk scores
+      riskscores <- get_risk_scores(model, learningmodel, model_type = "coxnet")
+
+      # Get selected variables
+      coef_matrix <- coef(model, s = "lambda.min")
+      selected_vars <- rownames(coef_matrix)[coef_matrix[,1] != 0]
+      cat(sprintf("Selected %d variables with %s\n", length(selected_vars), modelparameters$modeltype))
+
+      scorelearning <- data.frame(risk_score = riskscores)
+      predictclasslearning <- NULL
+      classlearning <- NULL
+
+    } else if (modelparameters$modeltype=="randomforest"){
       learningmodel<-as.data.frame(learningmodel[sort(rownames(learningmodel)),])
 
       x<-as.data.frame(learningmodel[,-1])
@@ -3193,14 +3330,29 @@ modelfunction <- function(learningmodel,
     # levels(predictclasslearning)<-paste("test",lev,sep="")
     
     ########
-    
-    reslearningmodel<-data.frame(classlearning,scorelearning,predictclasslearning)
-    colnames(reslearningmodel) <-c("classlearning","scorelearning","predictclasslearning") 
+
+    # Create results based on model type
+    if(is_survival_model){
+      # For survival models: store risk scores
+      reslearningmodel <- list(
+        riskscores = scorelearning$risk_score,
+        scorelearning = scorelearning$risk_score,  # Keep for compatibility
+        predictclasslearning = NULL,
+        classlearning = NULL
+      )
+    } else {
+      # For classification models: traditional format
+      reslearningmodel<-data.frame(classlearning,scorelearning,predictclasslearning)
+      colnames(reslearningmodel) <-c("classlearning","scorelearning","predictclasslearning")
+    }
+
     datalearningmodel<-list("learningmodel"=learningmodel,"reslearningmodel"=reslearningmodel)
     
     if (modelparameters$adjustval){
       #Validation
-      colnames(validation)[1]<-"group"
+      if(!is_survival_model){
+        colnames(validation)[1]<-"group"
+      }
       validationdiff<-validation[,which(colnames(validation)%in%colnames(learningmodel))]
       learningselect2<-learningselect
       if(transformdataparameters$log) { 
@@ -3237,7 +3389,22 @@ modelfunction <- function(learningmodel,
       rownames(validationmodel)<-rownames(validationdiff)
       
       #prediction a partir du model
-      if(modelparameters$modeltype=="randomforest"){
+      # SURVIVAL MODELS VALIDATION
+      if(is_survival_model){
+        # For survival models: predict risk scores on validation set
+        if(modelparameters$modeltype == "rsf"){
+          risksval <- get_risk_scores(model, validationmodel, model_type = "rsf")
+        } else if(modelparameters$modeltype == "cox"){
+          risksval <- get_risk_scores(model, validationmodel, model_type = "cox")
+        } else if(modelparameters$modeltype %in% c("coxlasso", "coxelasticnet", "coxridge")){
+          risksval <- get_risk_scores(model, validationmodel, model_type = "coxnet")
+        }
+
+        scoreval <- risksval
+        predictclassval <- NULL
+        classval <- NULL
+
+      } else if(modelparameters$modeltype=="randomforest"){
         pred_probs_val <- randomForest:::predict.randomForest(
           object=model, type="prob", newdata=validationmodel
         )
@@ -3426,16 +3593,42 @@ modelfunction <- function(learningmodel,
         classval<-factor(classval,levels = rev(levels(classval)),ordered = TRUE)
       }
       
-      #levels(predictclassval)<-paste("test",levels(predictclassval),sep="")
-      levels(predictclassval)<-paste("test",lev,sep="")
-      resvalidationmodel<-data.frame(classval,scoreval,predictclassval)
-      colnames(resvalidationmodel) <-c("classval","scoreval","predictclassval") 
-      auc<-auc(roc(as.vector(classval), as.vector(scoreval),quiet=T))
-      datavalidationmodel<-list("validationdiff"=validationdiff,"validationmodel"=validationmodel,"resvalidationmodel"=resvalidationmodel,"auc"=auc)
+      # Create validation results based on model type
+      if(is_survival_model){
+        # For survival models
+        resvalidationmodel <- list(
+          riskscores = scoreval,
+          scoreval = scoreval,  # Keep for compatibility
+          predictclassval = NULL,
+          classval = NULL
+        )
+
+        # Combine validation data with time and status
+        validationmodel_full <- cbind(validationdiff[, 1:2], validationmodel)
+        colnames(validationmodel_full)[1:2] <- c("time", "status")
+
+        datavalidationmodel <- list(
+          "validationdiff" = validationdiff,
+          "validationmodel" = validationmodel_full,
+          "resvalidationmodel" = resvalidationmodel,
+          "auc" = NA  # No AUC for survival models
+        )
+      } else {
+        # For classification models
+        #levels(predictclassval)<-paste("test",levels(predictclassval),sep="")
+        levels(predictclassval)<-paste("test",lev,sep="")
+        resvalidationmodel<-data.frame(classval,scoreval,predictclassval)
+        colnames(resvalidationmodel) <-c("classval","scoreval","predictclassval")
+        auc<-auc(roc(as.vector(classval), as.vector(scoreval),quiet=T))
+        datavalidationmodel<-list("validationdiff"=validationdiff,"validationmodel"=validationmodel,"resvalidationmodel"=resvalidationmodel,"auc"=auc)
+      }
       
     }
     else{datavalidationmodel<-list()}
-    res<-list("datalearningmodel"=datalearningmodel,"model"=model,"datavalidationmodel"=datavalidationmodel,"groups"=lev,"parameters"=modelparameters)
+
+    # Return results with appropriate groups field
+    groups_val <- if(is_survival_model) NULL else lev
+    res<-list("datalearningmodel"=datalearningmodel,"model"=model,"datavalidationmodel"=datavalidationmodel,"groups"=groups_val,"parameters"=modelparameters)
   }
 }
 
