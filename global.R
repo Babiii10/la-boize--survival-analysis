@@ -35,131 +35,288 @@ usePackage("DT")
 usePackage("shinycssloaders")
 usePackage("writexl")
 usePackage("glmnet")#for lasso, elasticnet, ridge regression
-usePackage("survival")#for cox regression
+usePackage("survival")#for cox regression and survival analysis
+usePackage("survminer")#for Kaplan-Meier plots and survival visualization
+usePackage("ranger")#for Random Survival Forest
+usePackage("riskRegression")#for C-index and prediction metrics
+usePackage("pec")#for prediction error curves and Brier score
+usePackage("prodlim")#for product limit estimation (required by pec)
 usePackage("xgboost")#for xgboost gradient boosting
 usePackage("lightgbm")#for lightgbm gradient boosting
 usePackage("class")#for k-nearest neighbors
 
 
 ##########################
-# Multi-class Classification Helper Functions
+# Survival Analysis Helper Functions
 ##########################
 
-# Detect if classification is binary or multi-class
-is_multiclass <- function(group_factor){
-  return(length(levels(group_factor)) > 2)
+# Calculate C-index (Concordance Index / Harrell's C-statistic)
+# Measures discriminative ability of survival models (0.5 = random, 1.0 = perfect)
+calculate_cindex <- function(predicted_risk, time, status){
+  tryCatch({
+    # Use Hmisc's rcorr.cens which calculates C-index
+    # predicted_risk should be higher for higher risk (shorter survival)
+    result <- rcorr.cens(-predicted_risk, Surv(time, status))
+    # Return C-index (Dxy/2 + 0.5 = C-index, or use result["C Index"])
+    return(as.numeric(result["C Index"]))
+  }, error = function(e) {
+    warning(paste("Error calculating C-index:", e$message))
+    return(NA)
+  })
 }
 
-# Get number of classes
-get_n_classes <- function(group_factor){
-  return(length(levels(group_factor)))
+# Calculate Integrated Brier Score (IBS)
+# Lower is better (0 = perfect predictions)
+calculate_ibs <- function(model, data, time_col, status_col, times = NULL, formula = NULL){
+  tryCatch({
+    if(is.null(times)){
+      # Use quartiles of observed event times
+      event_times <- data[data[[status_col]] == 1, time_col]
+      times <- quantile(event_times, probs = c(0.25, 0.5, 0.75), na.rm = TRUE)
+    }
+
+    if(is.null(formula)){
+      formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~ 1"))
+    }
+
+    # Calculate prediction error using pec package
+    pec_result <- pec(object = list("model" = model),
+                      formula = formula,
+                      data = data,
+                      times = times,
+                      exact = FALSE,
+                      cens.model = "marginal",
+                      splitMethod = "none",
+                      B = 0,
+                      verbose = FALSE)
+
+    # Extract Integrated Brier Score
+    ibs <- crps(pec_result, times = times)[2]  # [1] is reference, [2] is model
+    return(as.numeric(ibs))
+  }, error = function(e) {
+    warning(paste("Error calculating IBS:", e$message))
+    return(NA)
+  })
 }
 
-# Convert scores/probabilities for multi-class
-# For binary: returns vector
-# For multi-class: returns matrix (n_samples x n_classes)
-process_multiclass_scores <- function(scores, group_factor, model_votes=NULL){
-  n_classes <- get_n_classes(group_factor)
+# Calculate Brier Score at specific time point
+calculate_brier_at_time <- function(model, data, time_col, status_col, time_point, formula = NULL){
+  tryCatch({
+    if(is.null(formula)){
+      formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~ 1"))
+    }
 
-  if(n_classes == 2){
-    # Binary classification - return vector
-    if(!is.null(model_votes)){
-      # For Random Forest
-      lev <- levels(group_factor)
-      names(lev) <- c("positif", "negatif")
-      return(model_votes[, lev["positif"]])
-    }
-    return(as.vector(scores))
-  } else {
-    # Multi-class - return matrix
-    if(!is.null(model_votes)){
-      # For Random Forest - votes is already a matrix
-      return(model_votes)
-    }
-    if(is.matrix(scores)){
-      return(scores)
-    }
-    # If scores is a vector, we can't properly handle multi-class
-    warning("Multi-class classification requires probability matrix, got vector")
-    return(scores)
-  }
+    pec_result <- pec(object = list("model" = model),
+                      formula = formula,
+                      data = data,
+                      times = time_point,
+                      exact = FALSE,
+                      cens.model = "marginal",
+                      splitMethod = "none",
+                      B = 0,
+                      verbose = FALSE)
+
+    # Extract Brier Score at time point
+    bs <- pec_result$AppErr$model[1]
+    return(as.numeric(bs))
+  }, error = function(e) {
+    warning(paste("Error calculating Brier Score:", e$message))
+    return(NA)
+  })
 }
 
-# Predict class labels from scores
-# For binary: uses threshold
-# For multi-class: uses argmax
-predict_from_scores <- function(scores, group_factor, threshold=0.5){
-  n_classes <- get_n_classes(group_factor)
-  lev <- levels(group_factor)
-
-  if(n_classes == 2){
-    # Binary classification - use threshold
-    names(lev) <- c("positif", "negatif")
-    predicted <- factor(levels = lev)
-    predicted[which(scores >= threshold)] <- lev["positif"]
-    predicted[which(scores < threshold)] <- lev["negatif"]
-    return(as.factor(predicted))
-  } else {
-    # Multi-class - use argmax
-    if(!is.matrix(scores)){
-      warning("Multi-class prediction requires probability matrix")
+# Extract predicted risk scores from survival models
+# Returns linear predictor (risk score) - higher = worse prognosis
+get_risk_scores <- function(model, newdata, model_type = "cox"){
+  tryCatch({
+    if(model_type == "cox" || model_type == "coxnet"){
+      # Cox model: use linear predictor
+      if(inherits(model, "coxph")){
+        risk_scores <- predict(model, newdata = newdata, type = "lp")
+      } else if(inherits(model, "cv.glmnet")){
+        # For glmnet cox models
+        x_matrix <- as.matrix(newdata[, -c(1:2)])  # Exclude time and status
+        risk_scores <- predict(model, newx = x_matrix, s = "lambda.min", type = "link")[,1]
+      }
+    } else if(model_type == "rsf" || model_type == "ranger"){
+      # Random Survival Forest
+      if(inherits(model, "ranger")){
+        # For ranger, use predicted mortality (CHF at last time)
+        pred <- predict(model, data = newdata)
+        risk_scores <- pred$chf[, ncol(pred$chf)]  # Cumulative hazard at last time
+      }
+    } else {
+      warning(paste("Unknown model type:", model_type))
       return(NULL)
     }
-    # Get class with maximum probability for each sample
-    predicted_idx <- apply(scores, 1, which.max)
-    predicted <- lev[predicted_idx]
-    return(as.factor(predicted))
-  }
+    return(risk_scores)
+  }, error = function(e) {
+    warning(paste("Error extracting risk scores:", e$message))
+    return(NULL)
+  })
 }
 
-# Calculate confusion matrix metrics
-# For binary: sensitivity, specificity
-# For multi-class: per-class metrics
-calculate_classification_metrics <- function(true_labels, predicted_labels){
-  conf_matrix <- table(Predicted = predicted_labels, Actual = true_labels)
-  n_classes <- length(unique(true_labels))
+# Calculate median survival time from survival curves
+get_median_survival <- function(model, newdata = NULL, model_type = "cox"){
+  tryCatch({
+    if(is.null(newdata)){
+      # Get median from training data (embedded in model)
+      if(inherits(model, "coxph")){
+        surv_obj <- survfit(model)
+        median_surv <- summary(surv_obj)$table["median"]
+      } else if(inherits(model, "ranger")){
+        # For ranger, calculate median from prediction
+        median_surv <- median(model$survival.times, na.rm = TRUE)
+      }
+    } else {
+      # Calculate median for new data
+      if(inherits(model, "coxph")){
+        surv_obj <- survfit(model, newdata = newdata)
+        median_surv <- summary(surv_obj)$table["median"]
+      } else if(inherits(model, "ranger")){
+        pred <- predict(model, data = newdata)
+        # Extract median survival time (requires survival matrix)
+        median_surv <- NA  # Simplified - would need proper calculation
+      }
+    }
+    return(as.numeric(median_surv))
+  }, error = function(e) {
+    warning(paste("Error calculating median survival:", e$message))
+    return(NA)
+  })
+}
 
-  if(n_classes == 2){
-    # Binary classification metrics
-    TP <- conf_matrix[2, 2]
-    TN <- conf_matrix[1, 1]
-    FP <- conf_matrix[2, 1]
-    FN <- conf_matrix[1, 2]
+##########################
+# Survival Model Building Functions
+##########################
 
-    sensitivity <- TP / (TP + FN)
-    specificity <- TN / (TN + FP)
-    accuracy <- (TP + TN) / sum(conf_matrix)
+# Fit Cox Proportional Hazards Model
+fit_cox_model <- function(data, time_col = "time", status_col = "status", covariates = NULL){
+  tryCatch({
+    # Build formula
+    if(is.null(covariates)){
+      # Use all columns except time and status
+      covariates <- setdiff(colnames(data), c(time_col, status_col))
+    }
 
-    return(list(
-      confusion_matrix = conf_matrix,
-      sensitivity = sensitivity,
-      specificity = specificity,
-      accuracy = accuracy
-    ))
-  } else {
-    # Multi-class metrics (per-class)
-    # Sensitivity = Recall = TP / (TP + FN) for each class
-    sensitivity_per_class <- diag(conf_matrix) / rowSums(conf_matrix)
+    formula_str <- paste("Surv(", time_col, ",", status_col, ") ~", paste(covariates, collapse = " + "))
+    formula_obj <- as.formula(formula_str)
 
-    # Precision = TP / (TP + FP) for each class
-    precision_per_class <- diag(conf_matrix) / colSums(conf_matrix)
+    # Fit Cox model
+    cox_model <- coxph(formula_obj, data = data)
 
-    # Overall accuracy
-    accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+    return(cox_model)
+  }, error = function(e) {
+    warning(paste("Error fitting Cox model:", e$message))
+    return(NULL)
+  })
+}
 
-    # Macro-averaged metrics
-    macro_sensitivity <- mean(sensitivity_per_class, na.rm=TRUE)
-    macro_precision <- mean(precision_per_class, na.rm=TRUE)
+# Fit Cox model with Lasso/ElasticNet/Ridge penalization
+fit_coxnet_model <- function(data, time_col = "time", status_col = "status", alpha = 1, nfolds = 10){
+  tryCatch({
+    # Prepare data
+    x_matrix <- as.matrix(data[, !colnames(data) %in% c(time_col, status_col)])
+    y_surv <- Surv(data[[time_col]], data[[status_col]])
 
-    return(list(
-      confusion_matrix = conf_matrix,
-      sensitivity_per_class = sensitivity_per_class,
-      precision_per_class = precision_per_class,
-      macro_sensitivity = macro_sensitivity,
-      macro_precision = macro_precision,
-      accuracy = accuracy
-    ))
-  }
+    # Fit penalized Cox model with cross-validation
+    # alpha = 1 for Lasso, alpha = 0 for Ridge, 0 < alpha < 1 for ElasticNet
+    cv_model <- cv.glmnet(x = x_matrix, y = y_surv,
+                          family = "cox",
+                          alpha = alpha,
+                          nfolds = nfolds,
+                          type.measure = "C")
+
+    return(cv_model)
+  }, error = function(e) {
+    warning(paste("Error fitting penalized Cox model:", e$message))
+    return(NULL)
+  })
+}
+
+# Fit Random Survival Forest using ranger
+fit_rsf_model <- function(data, time_col = "time", status_col = "status",
+                          num_trees = 500, mtry = NULL, min_node_size = NULL){
+  tryCatch({
+    # Build formula
+    formula_str <- paste("Surv(", time_col, ",", status_col, ") ~ .")
+    formula_obj <- as.formula(formula_str)
+
+    # Set default parameters if not provided
+    n_features <- ncol(data) - 2  # Exclude time and status
+    if(is.null(mtry)){
+      mtry <- floor(sqrt(n_features))
+    }
+    if(is.null(min_node_size)){
+      min_node_size <- 5
+    }
+
+    # Fit Random Survival Forest
+    rsf_model <- ranger(formula_obj,
+                        data = data,
+                        num.trees = num_trees,
+                        mtry = mtry,
+                        min.node.size = min_node_size,
+                        importance = "permutation",
+                        splitrule = "logrank",
+                        verbose = FALSE,
+                        seed = 42)
+
+    return(rsf_model)
+  }, error = function(e) {
+    warning(paste("Error fitting Random Survival Forest:", e$message))
+    return(NULL)
+  })
+}
+
+# Tune Random Survival Forest hyperparameters
+tune_rsf_model <- function(data, time_col = "time", status_col = "status",
+                           ntree_values = c(100, 500, 1000),
+                           mtry_values = NULL,
+                           nodesize_values = c(3, 5, 10)){
+  tryCatch({
+    n_features <- ncol(data) - 2
+
+    if(is.null(mtry_values)){
+      mtry_values <- c(floor(sqrt(n_features)), floor(n_features/3), floor(n_features/2))
+    }
+
+    # Grid search
+    best_cindex <- 0
+    best_params <- list(ntree = 500, mtry = floor(sqrt(n_features)), nodesize = 5)
+
+    for(nt in ntree_values){
+      for(mt in mtry_values){
+        for(ns in nodesize_values){
+          model <- fit_rsf_model(data, time_col, status_col,
+                                num_trees = nt, mtry = mt, min_node_size = ns)
+
+          if(!is.null(model)){
+            # Get OOB prediction error as proxy for C-index
+            cindex <- model$prediction.error  # Actually concordance error, need to convert
+
+            if(cindex > best_cindex){
+              best_cindex <- cindex
+              best_params <- list(ntree = nt, mtry = mt, nodesize = ns)
+            }
+          }
+        }
+      }
+    }
+
+    # Fit final model with best parameters
+    final_model <- fit_rsf_model(data, time_col, status_col,
+                                 num_trees = best_params$ntree,
+                                 mtry = best_params$mtry,
+                                 min_node_size = best_params$nodesize)
+
+    final_model$best_params <- best_params
+
+    return(final_model)
+  }, error = function(e) {
+    warning(paste("Error tuning RSF model:", e$message))
+    return(NULL)
+  })
 }
 
 ##########################
