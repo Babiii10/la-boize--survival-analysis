@@ -320,6 +320,177 @@ tune_rsf_model <- function(data, time_col = "time", status_col = "status",
 }
 
 ##########################
+# Survival Statistical Tests Functions
+##########################
+
+# Perform Log-rank test for each variable
+perform_logrank_test <- function(data, time_col = "time", status_col = "status"){
+  tryCatch({
+    # Variables to test (exclude time and status)
+    vars_to_test <- setdiff(colnames(data), c(time_col, status_col))
+
+    results <- data.frame(
+      variable = vars_to_test,
+      pvalue = NA,
+      chisq = NA,
+      stringsAsFactors = FALSE
+    )
+
+    for(i in seq_along(vars_to_test)){
+      var <- vars_to_test[i]
+
+      # Dichotomize variable by median (for continuous variables)
+      tryCatch({
+        if(is.numeric(data[[var]])){
+          var_groups <- ifelse(data[[var]] >= median(data[[var]], na.rm = TRUE), "High", "Low")
+        } else {
+          var_groups <- as.factor(data[[var]])
+        }
+
+        # Log-rank test
+        test_result <- survdiff(Surv(data[[time_col]], data[[status_col]]) ~ var_groups)
+        pval <- 1 - pchisq(test_result$chisq, df = length(levels(as.factor(var_groups))) - 1)
+
+        results$pvalue[i] <- pval
+        results$chisq[i] <- test_result$chisq
+      }, error = function(e){
+        results$pvalue[i] <- NA
+        results$chisq[i] <- NA
+      })
+    }
+
+    return(results)
+  }, error = function(e) {
+    warning(paste("Error performing log-rank test:", e$message))
+    return(NULL)
+  })
+}
+
+# Perform univariate Cox regression (Wald test)
+perform_cox_univariate <- function(data, time_col = "time", status_col = "status"){
+  tryCatch({
+    vars_to_test <- setdiff(colnames(data), c(time_col, status_col))
+
+    results <- data.frame(
+      variable = vars_to_test,
+      hazard_ratio = NA,
+      HR_lower_95 = NA,
+      HR_upper_95 = NA,
+      pvalue = NA,
+      coefficient = NA,
+      stringsAsFactors = FALSE
+    )
+
+    for(i in seq_along(vars_to_test)){
+      var <- vars_to_test[i]
+
+      formula_str <- paste("Surv(", time_col, ",", status_col, ") ~", var)
+
+      tryCatch({
+        cox_model <- coxph(as.formula(formula_str), data = data)
+        coef_summary <- summary(cox_model)$coefficients
+        conf_int <- summary(cox_model)$conf.int
+
+        results$coefficient[i] <- coef_summary[1, "coef"]
+        results$hazard_ratio[i] <- exp(coef_summary[1, "coef"])
+        results$pvalue[i] <- coef_summary[1, "Pr(>|z|)"]
+
+        if(!is.null(conf_int) && nrow(conf_int) > 0){
+          results$HR_lower_95[i] <- conf_int[1, "lower .95"]
+          results$HR_upper_95[i] <- conf_int[1, "upper .95"]
+        }
+      }, error = function(e){
+        results$hazard_ratio[i] <- NA
+        results$pvalue[i] <- NA
+      })
+    }
+
+    return(results)
+  }, error = function(e) {
+    warning(paste("Error performing Cox univariate test:", e$message))
+    return(NULL)
+  })
+}
+
+##########################
+# Survival Visualization Functions
+##########################
+
+# Plot Kaplan-Meier survival curves
+plot_kaplan_meier <- function(time, status, risk_groups = NULL, title = "Kaplan-Meier Survival Curve",
+                              show_risk_table = TRUE, show_conf_int = TRUE){
+  tryCatch({
+    # Create data frame
+    if(is.null(risk_groups)){
+      plot_data <- data.frame(time = time, status = status)
+      fit <- survfit(Surv(time, status) ~ 1, data = plot_data)
+      show_pval <- FALSE
+    } else {
+      plot_data <- data.frame(time = time, status = status, group = risk_groups)
+      fit <- survfit(Surv(time, status) ~ group, data = plot_data)
+      show_pval <- TRUE
+    }
+
+    # Create plot
+    p <- ggsurvplot(
+      fit,
+      data = plot_data,
+      risk.table = show_risk_table,
+      pval = show_pval,
+      conf.int = show_conf_int,
+      xlim = c(0, max(time, na.rm = TRUE)),
+      break.time.by = max(time, na.rm = TRUE) / 10,
+      ggtheme = theme_minimal(),
+      title = title,
+      xlab = "Time",
+      ylab = "Survival probability",
+      legend.title = "Group",
+      legend.labs = if(!is.null(risk_groups)) levels(as.factor(risk_groups)) else NULL,
+      palette = c("#E7B800", "#2E9FDF", "#FC4E07"),
+      risk.table.height = 0.25
+    )
+
+    return(p)
+  }, error = function(e) {
+    warning(paste("Error plotting Kaplan-Meier curve:", e$message))
+    # Return simple plot as fallback
+    plot_data <- data.frame(time = time, status = status)
+    fit <- survfit(Surv(time, status) ~ 1, data = plot_data)
+    plot(fit, xlab = "Time", ylab = "Survival probability", main = title)
+    return(NULL)
+  })
+}
+
+# Plot cumulative hazard
+plot_cumulative_hazard <- function(time, status, risk_groups = NULL, title = "Cumulative Hazard"){
+  tryCatch({
+    if(is.null(risk_groups)){
+      plot_data <- data.frame(time = time, status = status)
+      fit <- survfit(Surv(time, status) ~ 1, data = plot_data)
+    } else {
+      plot_data <- data.frame(time = time, status = status, group = risk_groups)
+      fit <- survfit(Surv(time, status) ~ group, data = plot_data)
+    }
+
+    p <- ggsurvplot(
+      fit,
+      data = plot_data,
+      fun = "cumhaz",
+      ggtheme = theme_minimal(),
+      title = title,
+      xlab = "Time",
+      ylab = "Cumulative Hazard",
+      legend.title = "Group"
+    )
+
+    return(p)
+  }, error = function(e) {
+    warning(paste("Error plotting cumulative hazard:", e$message))
+    return(NULL)
+  })
+}
+
+##########################
 importfile<-function (datapath,extension,NAstring="NA",sheet=1,skiplines=0,dec=".",sep=","){
   # datapath: path of the file
   #extention: extention of the file : csv, xls, ou xlsx
@@ -456,10 +627,40 @@ toto<-as.data.frame(toto[,c(colnames(toto)[1],sort(colnames(toto)[-1]))])
 }
 confirmdata<-function(toto){
   toto<-as.data.frame(toto)
-  toto[,1]<-as.factor(as.character(toto[,1]))
-  for (i in 2:ncol(toto)){
-    toto[,i]<-as.numeric(as.character(toto[,i]))
+
+  # For survival analysis: verify time and status columns exist
+  col_names <- tolower(colnames(toto))
+
+  # Check if columns 1 and 2 are time and status (expected structure)
+  if(ncol(toto) >= 2){
+    # Assume columns 1 and 2 are time and status
+    colnames(toto)[1] <- "time"
+    colnames(toto)[2] <- "status"
+
+    # Convert time to numeric
+    toto[,1] <- as.numeric(as.character(toto[,1]))
+
+    # Convert status to numeric and verify it's binary
+    toto[,2] <- as.numeric(as.character(toto[,2]))
+
+    # Verify status contains only 0 and 1
+    unique_status <- unique(toto[,2][!is.na(toto[,2])])
+    if(!all(unique_status %in% c(0, 1))){
+      warning("Status column should contain only 0 (censored) and 1 (event). Converting to binary.")
+      # Attempt to convert: assume lowest value = 0 (censored), highest = 1 (event)
+      toto[,2] <- as.numeric(toto[,2] == max(toto[,2], na.rm = TRUE))
+    }
+
+    # Convert remaining columns to numeric (features)
+    if(ncol(toto) > 2){
+      for (i in 3:ncol(toto)){
+        toto[,i] <- as.numeric(as.character(toto[,i]))
+      }
+    }
+  } else {
+    stop("Data must have at least 2 columns: time and status")
   }
+
   return(toto)
 }
 
