@@ -1107,25 +1107,84 @@ output$plotmodeldecouvroc <- renderPlot({
 })
 output$youndendecouv<-renderTable({
   datalearningmodel<<-MODEL()$DATALEARNINGMODEL
-  resyounden<-younden(datalearningmodel$reslearningmodel$classlearning, datalearningmodel$reslearningmodel$scorelearning)
-  resyounden<-data.frame(resyounden)
-  colnames(resyounden)<-c("")
-  rownames(resyounden)<-c("younden","sensibility younden","specificity younden","threshold younden")
-  
-  resyounden
+
+  # For survival models: show survival statistics
+  if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+    time_data <- datalearningmodel$learningmodel$time
+    status_data <- datalearningmodel$learningmodel$status
+    risk_scores <- datalearningmodel$reslearningmodel$riskscores
+
+    # Calculate survival statistics
+    n_total <- length(status_data)
+    n_events <- sum(status_data == 1, na.rm = TRUE)
+    n_censored <- sum(status_data == 0, na.rm = TRUE)
+    median_time <- median(time_data, na.rm = TRUE)
+    risk_median <- median(risk_scores, na.rm = TRUE)
+
+    surv_stats <- data.frame(
+      Value = c(
+        n_total,
+        n_events,
+        n_censored,
+        round(median_time, 2),
+        round(risk_median, 3)
+      )
+    )
+    rownames(surv_stats) <- c("Total samples", "Events", "Censored", "Median time", "Median risk score")
+    surv_stats
+  } else {
+    # For classification models: show younden statistics
+    resyounden<-younden(datalearningmodel$reslearningmodel$classlearning, datalearningmodel$reslearningmodel$scorelearning)
+    resyounden<-data.frame(resyounden)
+    colnames(resyounden)<-c("")
+    rownames(resyounden)<-c("younden","sensibility younden","specificity younden","threshold younden")
+    resyounden
+  }
 },include.rownames=TRUE)
  
 output$downloadplotdecouvroc = downloadHandler(
-  filename = function() {paste('graph','.',input$paramdownplot, sep='')},
+  filename = function() {paste('km_plot_learning','.',input$paramdownplot, sep='')},
   content = function(file) {
-    ggsave(file, plot =  ROCcurve(validation = datalearningmodel$reslearningmodel$classlearning,
-                                  decisionvalues =  datalearningmodel$reslearningmodel$scorelearning),  device = input$paramdownplot)},
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+    if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+      # Create risk groups
+      risk_scores <- datalearningmodel$reslearningmodel$riskscores
+      risk_groups <- ifelse(risk_scores >= median(risk_scores, na.rm = TRUE), "High risk", "Low risk")
+
+      # Generate KM plot
+      km_plot <- plot_kaplan_meier(
+        time = datalearningmodel$learningmodel$time,
+        status = datalearningmodel$learningmodel$status,
+        risk_groups = risk_groups,
+        title = "Kaplan-Meier Curve - Learning Set"
+      )
+
+      # ggsurvplot returns a list with $plot element
+      if(!is.null(km_plot) && !is.null(km_plot$plot)){
+        ggsave(file, plot = km_plot$plot, device = input$paramdownplot, width = 10, height = 8)
+      }
+    }
+  },
   contentType=NA)
 
 output$downloaddatadecouvroc <- downloadHandler(
-  filename = function() { paste('dataset', '.',input$paramdowntable, sep='') },
+  filename = function() { paste('km_data_learning', '.',input$paramdowntable, sep='') },
   content = function(file) {
-    downloaddataset(ROCcurve(validation = datalearningmodel$reslearningmodel$classlearning,decisionvalues =  datalearningmodel$reslearningmodel$scorelearning,graph=F), file) })
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+    if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+      # Create data export with risk scores and survival info
+      export_data <- data.frame(
+        Sample = rownames(datalearningmodel$learningmodel),
+        Time = datalearningmodel$learningmodel$time,
+        Status = datalearningmodel$learningmodel$status,
+        Risk_Score = datalearningmodel$reslearningmodel$riskscores,
+        Risk_Group = ifelse(datalearningmodel$reslearningmodel$riskscores >=
+                           median(datalearningmodel$reslearningmodel$riskscores, na.rm = TRUE),
+                           "High risk", "Low risk")
+      )
+      downloaddataset(export_data, file)
+    }
+  })
 
 output$plotmodeldecouvbp <- renderPlot({
   datalearningmodel<<-MODEL()$DATALEARNINGMODEL
@@ -1151,8 +1210,32 @@ output$nbselectmodel<-renderText({
 
 output$tabmodeldecouv<-renderTable({
   datalearningmodel<-MODEL()$DATALEARNINGMODEL
-  as.data.frame.matrix(table(datalearningmodel$reslearningmodel$predictclasslearning,datalearningmodel$reslearningmodel$classlearning ))
-},include.rownames=TRUE)
+
+  # Check if this is a survival model (has riskscores)
+  if(!is.null(datalearningmodel$reslearningmodel$riskscores)){
+    # Display risk score quantiles for survival models
+    risk_scores <- datalearningmodel$reslearningmodel$riskscores
+    quantiles <- quantile(risk_scores, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+
+    risk_summary <- data.frame(
+      Statistic = c("Minimum", "Q1 (25%)", "Median (50%)", "Q3 (75%)", "Maximum", "Mean", "SD"),
+      Value = c(
+        quantiles[1],
+        quantiles[2],
+        quantiles[3],
+        quantiles[4],
+        quantiles[5],
+        mean(risk_scores, na.rm = TRUE),
+        sd(risk_scores, na.rm = TRUE)
+      )
+    )
+    risk_summary
+  } else {
+    # Display confusion matrix for classification models
+    as.data.frame.matrix(table(datalearningmodel$reslearningmodel$predictclasslearning,
+                               datalearningmodel$reslearningmodel$classlearning))
+  }
+},include.rownames=FALSE)
 
 output$cindexdecouv<-renderText({
   datalearningmodel<-MODEL()$DATALEARNINGMODEL
@@ -1218,16 +1301,48 @@ output$plotmodelvalroc <- renderPlot({
 })
 
 output$downloadplotvalroc = downloadHandler(
-  filename = function() {paste('graph','.',input$paramdownplot, sep='')},
+  filename = function() {paste('km_plot_validation','.',input$paramdownplot, sep='')},
   content = function(file) {
-    ggsave(file, plot =ROCcurve(validation =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,decisionvalues =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval),  device = input$paramdownplot)},
+    datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+    if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+      # Create risk groups
+      risk_scores <- datavalidationmodel$resvalidationmodel$riskscores
+      risk_groups <- ifelse(risk_scores >= median(risk_scores, na.rm = TRUE), "High risk", "Low risk")
+
+      # Generate KM plot
+      km_plot <- plot_kaplan_meier(
+        time = datavalidationmodel$validationmodel$time,
+        status = datavalidationmodel$validationmodel$status,
+        risk_groups = risk_groups,
+        title = "Kaplan-Meier Curve - Validation Set"
+      )
+
+      # ggsurvplot returns a list with $plot element
+      if(!is.null(km_plot) && !is.null(km_plot$plot)){
+        ggsave(file, plot = km_plot$plot, device = input$paramdownplot, width = 10, height = 8)
+      }
+    }
+  },
   contentType=NA)
 
 output$downloaddatavalroc <- downloadHandler(
-  filename = function() { paste('dataset', '.',input$paramdowntable, sep='') },
+  filename = function() { paste('km_data_validation', '.',input$paramdowntable, sep='') },
   content = function(file) {
-    downloaddataset(   ROCcurve(validation =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,decisionvalues =  MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval,graph=F ), file) 
-    })
+    datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+    if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+      # Create data export with risk scores and survival info
+      export_data <- data.frame(
+        Sample = rownames(datavalidationmodel$validationmodel),
+        Time = datavalidationmodel$validationmodel$time,
+        Status = datavalidationmodel$validationmodel$status,
+        Risk_Score = datavalidationmodel$resvalidationmodel$riskscores,
+        Risk_Group = ifelse(datavalidationmodel$resvalidationmodel$riskscores >=
+                           median(datavalidationmodel$resvalidationmodel$riskscores, na.rm = TRUE),
+                           "High risk", "Low risk")
+      )
+      downloaddataset(export_data, file)
+    }
+  })
 
 output$plotmodelvalbp <- renderPlot({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
@@ -1250,16 +1365,67 @@ output$downloaddatamodelvalbp <- downloadHandler(
 
 output$youndenval<-renderTable({
   datavalidationmodel<<-MODEL()$DATAVALIDATIONMODEL
-  resyounden<-younden(datavalidationmodel$resvalidationmodel$classval,datavalidationmodel$resvalidationmodel$scoreval )
-  resyounden<-data.frame(resyounden)
-  colnames(resyounden)<-c("")
-  rownames(resyounden)<-c("younden","sensibility younden","specificity younden","threshold younden")
-  resyounden
+
+  # For survival models: show survival statistics
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    time_data <- datavalidationmodel$validationmodel$time
+    status_data <- datavalidationmodel$validationmodel$status
+    risk_scores <- datavalidationmodel$resvalidationmodel$riskscores
+
+    # Calculate survival statistics
+    n_total <- length(status_data)
+    n_events <- sum(status_data == 1, na.rm = TRUE)
+    n_censored <- sum(status_data == 0, na.rm = TRUE)
+    median_time <- median(time_data, na.rm = TRUE)
+    risk_median <- median(risk_scores, na.rm = TRUE)
+
+    surv_stats <- data.frame(
+      Value = c(
+        n_total,
+        n_events,
+        n_censored,
+        round(median_time, 2),
+        round(risk_median, 3)
+      )
+    )
+    rownames(surv_stats) <- c("Total samples", "Events", "Censored", "Median time", "Median risk score")
+    surv_stats
+  } else {
+    # For classification models: show younden statistics
+    resyounden<-younden(datavalidationmodel$resvalidationmodel$classval,datavalidationmodel$resvalidationmodel$scoreval )
+    resyounden<-data.frame(resyounden)
+    colnames(resyounden)<-c("")
+    rownames(resyounden)<-c("younden","sensibility younden","specificity younden","threshold younden")
+    resyounden
+  }
 },include.rownames=TRUE)
 
-output$tabmodelval<-renderTable({ 
+output$tabmodelval<-renderTable({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
-  as.data.frame.matrix(table(datavalidationmodel$resvalidationmodel$predictclassval, datavalidationmodel$resvalidationmodel$classval))
+
+  # For survival models: show risk score quantiles
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    risk_scores <- datavalidationmodel$resvalidationmodel$riskscores
+    quantiles <- quantile(risk_scores, probs = c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE)
+
+    risk_summary <- data.frame(
+      Statistic = c("Minimum", "Q1 (25%)", "Median (50%)", "Q3 (75%)", "Maximum", "Mean", "SD"),
+      Value = c(
+        quantiles[1],
+        quantiles[2],
+        quantiles[3],
+        quantiles[4],
+        quantiles[5],
+        mean(risk_scores, na.rm = TRUE),
+        sd(risk_scores, na.rm = TRUE)
+      )
+    )
+
+    risk_summary
+  } else {
+    # For classification models: show confusion matrix
+    as.data.frame.matrix(table(datavalidationmodel$resvalidationmodel$predictclassval, datavalidationmodel$resvalidationmodel$classval))
+  }
 },include.rownames=TRUE)
 output$cindexval<-renderText({
   datavalidationmodel<-MODEL()$DATAVALIDATIONMODEL
