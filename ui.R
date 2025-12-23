@@ -910,8 +910,14 @@ shinyUI(fluidPage(
                                                      plotOutput("plottestparameterslearning")%>% withSpinner(color="#0dc5c1",type = 1),
                                                      p(downloadButton("downloadplottestparameterslearning","Download plot"), align = 'center')
                                               ),
-                                              tabPanel("Test parameters", icon  =  icon("cog"),
-                                                       fluidRow(
+                                              column(6,
+                                                       plotOutput("plottestparametersvalidation")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                       p(downloadButton("downloadplottestparametersvalidation","Download plot"), align = 'center')
+                                              )
+                                            ),
+                                            hr(),
+                                            h3("Test Parameters Configuration"),
+                                            fluidRow(
                                                          column(6,
                                                                 h4("Selection Parameters"),
                                                                 sliderInput("prctvaluestest", "Percent of values accepted",min = 0, max = 100, value = c(50,90),width="60%"),
@@ -1063,15 +1069,13 @@ shinyUI(fluidPage(
                                                        #     helpText("Relationship between optimal threshold and validation performance. Each point represents a parameter combination. The curve shows the trend.")
                                                        #   )
                                                        # ),
-                                                       fluidRow(
-                                                         column(
-                                                           12,
-                                                           h5("Overfitting Analysis", style = "margin-top: 20px; margin-bottom: 10px;"),
-                                                           plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                           p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
-                                                           helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
-                                                         )
-                                                       )
+                                            fluidRow(
+                                              column(
+                                                12,
+                                                h5("Overfitting Analysis", style = "margin-top: 20px; margin-bottom: 10px;"),
+                                                plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
+                                                helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
                                               )
                                             )
                                    ),
@@ -1163,5 +1167,4 @@ shinyUI(fluidPage(
                                    )
                        )
       )
-    )
     )
