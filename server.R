@@ -166,7 +166,108 @@ shinyServer(function(input, output,session) {
                 choices = c("None (use row names)", cols),
                 selected = default_id)
   })
-  
+
+  # Validation feedback for column selection
+  observeEvent(c(input$time_column, input$status_column), {
+    req(input$time_column, input$status_column)
+
+    # Check if time and status columns are different
+    if(input$time_column == input$status_column){
+      shinyFeedback::feedbackDanger(
+        "time_column",
+        show = TRUE,
+        text = "Time and Status columns must be different!"
+      )
+      shinyFeedback::feedbackDanger(
+        "status_column",
+        show = TRUE,
+        text = "Time and Status columns must be different!"
+      )
+    } else {
+      # Clear feedback if columns are valid
+      shinyFeedback::hideFeedback("time_column")
+      shinyFeedback::hideFeedback("status_column")
+    }
+  }, ignoreInit = TRUE)
+
+  # Validation feedback for data after confirmation
+  observeEvent(input$confirmdatabutton, {
+    req(DATA()$LEARNING)
+    learning <- DATA()$LEARNING
+
+    # Check if time and status columns exist
+    if(!"time" %in% colnames(learning)){
+      shinyFeedback::feedbackWarning(
+        "time_column",
+        show = TRUE,
+        text = "Time column not found in data after confirmation"
+      )
+    } else {
+      # Validate time values are positive
+      time_values <- learning$time
+      if(any(time_values <= 0, na.rm = TRUE)){
+        negative_rows <- which(time_values <= 0)
+        shinyFeedback::feedbackDanger(
+          "confirmdatabutton",
+          show = TRUE,
+          text = paste0("❌ Error: Time values must be > 0. Found invalid values in rows: ",
+                       paste(head(negative_rows, 10), collapse = ", "),
+                       if(length(negative_rows) > 10) "..." else "")
+        )
+      } else if(any(is.na(time_values))){
+        na_count <- sum(is.na(time_values))
+        shinyFeedback::feedbackWarning(
+          "confirmdatabutton",
+          show = TRUE,
+          text = paste0("⚠️ Warning: Time column contains ", na_count, " NA values")
+        )
+      } else {
+        shinyFeedback::feedbackSuccess(
+          "confirmdatabutton",
+          show = TRUE,
+          text = "✓ Time values validated successfully"
+        )
+      }
+    }
+
+    # Validate status column
+    if(!"status" %in% colnames(learning)){
+      shinyFeedback::feedbackWarning(
+        "status_column",
+        show = TRUE,
+        text = "Status column not found in data after confirmation"
+      )
+    } else {
+      status_values <- learning$status
+      unique_status <- unique(status_values[!is.na(status_values)])
+
+      if(length(unique_status) != 2){
+        shinyFeedback::feedbackDanger(
+          "status_column",
+          show = TRUE,
+          text = paste0("❌ Error: Status must have exactly 2 unique values. Found: ",
+                       length(unique_status), " (", paste(unique_status, collapse = ", "), ")")
+        )
+      } else if(any(is.na(status_values))){
+        na_count <- sum(is.na(status_values))
+        shinyFeedback::feedbackWarning(
+          "status_column",
+          show = TRUE,
+          text = paste0("⚠️ Warning: Status column contains ", na_count, " NA values")
+        )
+      } else {
+        # Success message
+        event_count <- sum(status_values == 1, na.rm = TRUE)
+        censored_count <- sum(status_values == 0, na.rm = TRUE)
+        shinyFeedback::feedbackSuccess(
+          "status_column",
+          show = TRUE,
+          text = paste0("✓ Status validated: ", event_count, " events, ", censored_count, " censored")
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
+
 #Save state#############  
   state <- reactiveValues()
   observe({
@@ -470,6 +571,83 @@ shinyServer(function(input, output,session) {
     content = function(file) {
       downloaddataset(   DATA()$VALIDATION, file) })
 
+  # Validation feedback for selection parameters
+  observeEvent(input$prctvalues, {
+    if(!is.null(input$prctvalues)){
+      if(input$prctvalues < 0 || input$prctvalues > 100){
+        shinyFeedback::feedbackDanger(
+          "prctvalues",
+          show = TRUE,
+          text = "Percentage must be between 0 and 100"
+        )
+      } else {
+        shinyFeedback::feedbackSuccess(
+          "prctvalues",
+          show = TRUE,
+          text = paste0("✓ Valid: ", input$prctvalues, "%")
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(c(input$maxvaluesgroupmin, input$minvaluesgroupmax), {
+    if(!is.null(input$maxvaluesgroupmin) && !is.null(input$minvaluesgroupmax)){
+      has_error <- FALSE
+
+      if(input$maxvaluesgroupmin < 0 || input$maxvaluesgroupmin > 100){
+        shinyFeedback::feedbackDanger(
+          "maxvaluesgroupmin",
+          show = TRUE,
+          text = "Must be between 0 and 100"
+        )
+        has_error <- TRUE
+      } else {
+        shinyFeedback::hideFeedback("maxvaluesgroupmin")
+      }
+
+      if(input$minvaluesgroupmax < 0 || input$minvaluesgroupmax > 100){
+        shinyFeedback::feedbackDanger(
+          "minvaluesgroupmax",
+          show = TRUE,
+          text = "Must be between 0 and 100"
+        )
+        has_error <- TRUE
+      } else {
+        shinyFeedback::hideFeedback("minvaluesgroupmax")
+      }
+
+      if(!has_error && input$maxvaluesgroupmin > input$minvaluesgroupmax){
+        shinyFeedback::feedbackWarning(
+          "maxvaluesgroupmin",
+          show = TRUE,
+          text = "Max group min should be ≤ Min group max"
+        )
+        shinyFeedback::feedbackWarning(
+          "minvaluesgroupmax",
+          show = TRUE,
+          text = "Min group max should be ≥ Max group min"
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$thresholdNAstructure, {
+    if(!is.null(input$thresholdNAstructure)){
+      if(input$thresholdNAstructure <= 0 || input$thresholdNAstructure >= 1){
+        shinyFeedback::feedbackDanger(
+          "thresholdNAstructure",
+          show = TRUE,
+          text = "P-value threshold must be between 0 and 1"
+        )
+      } else {
+        shinyFeedback::feedbackSuccess(
+          "thresholdNAstructure",
+          show = TRUE,
+          text = paste0("✓ Valid: α = ", input$thresholdNAstructure)
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
 
 #################
 SELECTDATA<-reactive({
@@ -660,6 +838,43 @@ output$downloaddatahist <- downloadHandler(
   content = function(file) {
     downloaddataset(histplot(toto=TRANSFORMDATA()$LEARNINGTRANSFORM,graph=F), file)
   })
+
+  # Validation feedback for test parameters
+  observeEvent(input$thresholdFC, {
+    if(!is.null(input$thresholdFC)){
+      if(input$thresholdFC < 0){
+        shinyFeedback::feedbackDanger(
+          "thresholdFC",
+          show = TRUE,
+          text = "Fold-change threshold must be positive (≥ 0)"
+        )
+      } else {
+        shinyFeedback::feedbackSuccess(
+          "thresholdFC",
+          show = TRUE,
+          text = paste0("✓ Valid: FC ≥ ", input$thresholdFC)
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$thresholdpv, {
+    if(!is.null(input$thresholdpv)){
+      if(input$thresholdpv < 0 || input$thresholdpv > 1){
+        shinyFeedback::feedbackDanger(
+          "thresholdpv",
+          show = TRUE,
+          text = "P-value threshold must be between 0 and 1"
+        )
+      } else {
+        shinyFeedback::feedbackSuccess(
+          "thresholdpv",
+          show = TRUE,
+          text = paste0("✓ Valid: p < ", input$thresholdpv)
+        )
+      }
+    }
+  }, ignoreInit = TRUE)
 
 #########
 TEST<-reactive({

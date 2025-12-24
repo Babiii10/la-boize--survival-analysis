@@ -45,6 +45,7 @@ usePackage("timeROC")#for time-dependent ROC curves with censoring
 usePackage("xgboost")#for xgboost gradient boosting
 usePackage("lightgbm")#for lightgbm gradient boosting
 usePackage("class")#for k-nearest neighbors
+usePackage("shinyFeedback")#for user feedback in UI
 
 
 ##########################
