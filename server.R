@@ -258,8 +258,52 @@ shinyServer(function(input, output,session) {
     di1<-dim(x = DATA()$VALIDATION)[1]  
   })
   output$dim2val<-renderText({
-    di2<-dim(x = DATA()$VALIDATION)[2]  
-  })  
+    di2<-dim(x = DATA()$VALIDATION)[2]
+  })
+
+  # Display status levels for event and censored
+  output$event<-renderText({
+    if(!is.null(DATA()$LEARNING) && "status" %in% colnames(DATA()$LEARNING)){
+      unique_status <- sort(unique(DATA()$LEARNING[,"status"]))
+      if(length(unique_status) >= 1){
+        if(input$invers){
+          return(as.character(unique_status[2]))
+        } else {
+          return(as.character(unique_status[1]))
+        }
+      }
+    }
+    return("")
+  })
+
+  output$censored<-renderText({
+    if(!is.null(DATA()$LEARNING) && "status" %in% colnames(DATA()$LEARNING)){
+      unique_status <- sort(unique(DATA()$LEARNING[,"status"]))
+      if(length(unique_status) >= 2){
+        if(input$invers){
+          return(as.character(unique_status[1]))
+        } else {
+          return(as.character(unique_status[2]))
+        }
+      }
+    }
+    return("")
+  })
+
+  # Display class distribution summary
+  output$class_summary<-renderText({
+    if(!is.null(DATA()$LEARNING) && "status" %in% colnames(DATA()$LEARNING)){
+      status_counts <- table(DATA()$LEARNING[,"status"])
+      if(length(status_counts) == 2){
+        event_count <- sum(DATA()$LEARNING[,"status"] == 1, na.rm = TRUE)
+        censored_count <- sum(DATA()$LEARNING[,"status"] == 0, na.rm = TRUE)
+        total <- event_count + censored_count
+        return(paste0("Events: ", event_count, " (", round(100*event_count/total, 1), "%) | ",
+                     "Censored: ", censored_count, " (", round(100*censored_count/total, 1), "%)"))
+      }
+    }
+    return("")
+  })
 
   #si erreur envoyÃÂÃÂ© pb import
   DATA<-reactive({

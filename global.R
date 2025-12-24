@@ -1349,7 +1349,7 @@ transformdata<-function(toto,transpose,zeroegalNA){
   
 toto<-as.data.frame(toto[,c(colnames(toto)[1],sort(colnames(toto)[-1]))])
 }
-confirmdata<-function(toto){
+confirmdata<-function(toto, invers = FALSE){
   toto<-as.data.frame(toto)
 
   # For survival analysis: verify time and status columns exist
@@ -1364,15 +1364,28 @@ confirmdata<-function(toto){
     # Convert time to numeric
     toto[,1] <- as.numeric(as.character(toto[,1]))
 
-    # Convert status to numeric and verify it's binary
+    # Convert status to numeric and recode based on user preference
     toto[,2] <- as.numeric(as.character(toto[,2]))
 
-    # Verify status contains only 0 and 1
-    unique_status <- unique(toto[,2][!is.na(toto[,2])])
+    # Get unique status values (sorted)
+    unique_status <- sort(unique(toto[,2][!is.na(toto[,2])]))
+
+    # Recode status to 0 (censored) and 1 (event) based on invers parameter
     if(!all(unique_status %in% c(0, 1))){
-      warning("Status column should contain only 0 (censored) and 1 (event). Converting to binary.")
-      # Attempt to convert: assume lowest value = 0 (censored), highest = 1 (event)
-      toto[,2] <- as.numeric(toto[,2] == max(toto[,2], na.rm = TRUE))
+      # User can define which value corresponds to event vs censored
+      if(length(unique_status) == 2){
+        if(invers){
+          # invers = TRUE: lowest value = censored (0), highest = event (1)
+          message("Status encoding: ", unique_status[1], " -> 0 (censored), ", unique_status[2], " -> 1 (event)")
+          toto[,2] <- ifelse(toto[,2] == unique_status[1], 0, 1)
+        } else {
+          # invers = FALSE: lowest value = event (1), highest = censored (0)
+          message("Status encoding: ", unique_status[1], " -> 1 (event), ", unique_status[2], " -> 0 (censored)")
+          toto[,2] <- ifelse(toto[,2] == unique_status[1], 1, 0)
+        }
+      } else {
+        stop("Status column must contain exactly 2 unique values. Found: ", paste(unique_status, collapse = ", "))
+      }
     }
 
     # Convert remaining columns to numeric (features)
@@ -1423,9 +1436,8 @@ importfunction<-function(importparameters){
       
     #}
     if(importparameters$confirmdatabutton!=0){
-      learning<-confirmdata(toto = learning)
-      if(importparameters$invers){learning[,1]<-factor(learning[,1],levels = rev(levels(learning[,1])))}
-      
+      learning<-confirmdata(toto = learning, invers = importparameters$invers)
+
       #learning<-learning[-which(apply(X = learning,MARGIN=1,function(x){sum(is.na(x))})==ncol(learning)),]
       
 #       lev<-levels(x = tablearn[,1])
@@ -1452,8 +1464,7 @@ importfunction<-function(importparameters){
       
     # }
     if(importparameters$confirmdatabutton!=0){
-      validation<-confirmdata(toto = validation)
-      if(importparameters$invers){validation[,1]<-factor(validation[,1],levels = rev(levels(validation[,1])))}
+      validation<-confirmdata(toto = validation, invers = importparameters$invers)
       
       #validation<-validation[-which(apply(X = validation,MARGIN=1,function(x){sum(is.na(x))})==ncol(validation)),]
         

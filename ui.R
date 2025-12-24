@@ -112,6 +112,15 @@ shinyUI(fluidPage(
                            )
                          ),
                          hr(),
+                         h4("Status Encoding for Survival Analysis"),
+                         fluidRow(
+                           column(3,checkboxInput("invers", "Inverse" , value = FALSE)),
+                           column(8,
+                                  p(textOutput("event",inline=T),HTML( '&#x21D2;'), "event ",br(),
+                                    textOutput("censored",inline=T),HTML( '&#x21D2;'), "censored",align="center")
+                           )
+                         ),
+                         hr(),
                          radioButtons("paramdownplot","Download images as",choices=list("png"="png","jpg"="jpg","pdf"="pdf"),selected="png"),
                          radioButtons("paramdowntable","Download datasets as",choices=list("csv"="csv","xlsx"="xlsx"),selected="csv"),
                          hr(),
