@@ -7,10 +7,10 @@ THEMES = c( "cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal",
             "superhero")
 shinyUI(fluidPage(
   theme = bslib::bs_theme(
-     bootswatch = "cerulean",
-     #primary = "#EA80FC", 
-     secondary = "#48DAC6"
-    ),
+    bootswatch = "cerulean",
+    #primary = "#EA80FC", 
+    secondary = "#48DAC6"
+  ),
   # div(input_dark_mode(id = "mode",
   #                     mode = "light"),
   #      style = "font-size:15px; color:grey; text-align:right;"
@@ -443,238 +443,270 @@ shinyUI(fluidPage(
                                                                                             h4("KNN Hyperparameter Explanation"),
                                                                                             p(strong("Number of Neighbors (k):"), "Determines how many nearest neighbors are considered when classifying a new data point. 
                                                                                            A smaller k can capture local patterns but may be sensitive to noise, while a larger k provides smoother decision boundaries but may overlook local nuances."
-                                                                                            )
-                                                                                          )
-                                                                                          
-                                                                         ),
-                                                                         conditionalPanel(condition = "input.model== 'naivebayes'",
-                                                                                          div(class = "myDiv",
-                                                                                              h4("Naive Bayes Hyperparameter Explanation"),
-                                                                                              p(strong("Laplace Smoothing:"), "A technique used to handle zero probabilities in categorical data. 
+                                                                                  )
+                                                                                )
+                                                                                
+                                                               ),
+                                                               conditionalPanel(condition = "input.model== 'naivebayes'",
+                                                                                div(class = "myDiv",
+                                                                                    h4("Naive Bayes Hyperparameter Explanation"),
+                                                                                    p(strong("Laplace Smoothing:"), "A technique used to handle zero probabilities in categorical data. 
                                                                                                It adds a small constant (usually 1) to each count to ensure that no probability is exactly zero, 
                                                                                                which can be particularly useful when dealing with unseen features in the training data.") 
-                                                                                          )
-                                                                                        ),
-                                                                         conditionalPanel(condition = "input.model=='svm'", 
-                                                                                          tags$head(
-                                                                                            tags$style(HTML("
+                                                                                )
+                                                               ),
+                                                               conditionalPanel(condition = "input.model=='svm'", 
+                                                                                tags$head(
+                                                                                  tags$style(HTML("
                                                                                                       .myDiv {
                                                                                                         border: 5px outset green;
                                                                                                         background-color: lightblue;    
                                                                                                         text-align: left;
                                                                                                       }
                                                                                                     "))
-                                                                                          ),
-                                                                                          helpText("Lambda controls the strength of regularization. Use automatic 
+                                                                                ),
+                                                                                helpText("Lambda controls the strength of regularization. Use automatic 
                                                                                                 selection via cross-validation for optimal results.")
-                                                                                          ,
-                                                                                          div(
-                                                                                            class = "myDiv",
-                                                                                            p("In SVM with RBF (Radial Basis Function) kernel, the hyperparameters C and gamma together control the complexity and generalisation capacity of the model.
+                                                                                ,
+                                                                                div(
+                                                                                  class = "myDiv",
+                                                                                  p("In SVM with RBF (Radial Basis Function) kernel, the hyperparameters C and gamma together control the complexity and generalisation capacity of the model.
                                                                                                 They are linked in the sense that modifying one influences the effect of the other on the decision boundary."),
-                                                                                            p("A high C value with a low gamma can lead to overfitting, while a low C with a high gamma may result in underfitting. 
+                                                                                  p("A high C value with a low gamma can lead to overfitting, while a low C with a high gamma may result in underfitting. 
                                                                                                  Therefore, it's crucial to tune both parameters together to find the optimal balance 
                                                                                               for the specific dataset."),
-                                                                                            HTML("<ul>
+                                                                                  HTML("<ul>
                                                                                                     <li>High C + high gamma → very flexible model, high risk of overfitting. </li>
                                                                                                     <li>Low C + low gamma → very smooth model, risk of underfitting. </li>
                                                                                                     <li> High C + low gamma → model that tries to classify well but with a generally smooth boundary. </li>
                                                                                                     <li> Low C + high gamma → model that accepts errors but with complex local boundaries.  </li>
                                                                                                  </ul>"
-                                                                                              
-                                                                                            )
-                                                                                            # ,
-                                                                                            #   p("High C + high gamma → very flexible model, high risk of overfitting."),
-                                                                                            #   p("Low C + low gamma → very smooth model, risk of underfitting."),
-                                                                                            #   p("High C + low gamma → model that tries to classify well but with a generally smooth boundary."),
-                                                                                            #   p("Low C + high gamma → model that accepts errors but with complex local boundaries. ")
-
-                                                                                          )
-                                                                                          ),
-                                                                         conditionalPanel(condition ="input.model=='randomforest'",
-                                                                                          div(
-                                                                                            class =  "myDiv",
-                                                                                            h4("Random Forest Hyperparameters Explanation"),
-                                                                                            p(strong("ntree:"), "Number of trees in the forest; more trees can improve performance but increase computation time."),
-                                                                                            p(strong("mtry:"), "Number of variables randomly sampled at each split; controls tree diversity and model robustness.")
-                                                                                          )
-                                                                                          ),
-                                                                         conditionalPanel(condition ="input.model=='xgboost'",
-                                                                                          div(
-                                                                                            class =  "myDiv",
-                                                                                            h4("XGBoost Hyperparameters Explanation"),
-                                                                                            p(strong("nrounds:"), "Also known as num_boost_round; defines the number of boosting iterations."),
-                                                                                            p(strong("max_depth:"), "Maximum depth of a tree; controls model complexity and overfitting."),
-                                                                                            p(strong("eta (learning rate):"), "Step size shrinkage used to prevent overfitting; smaller values require more rounds.")
-                                                                                          )
-                                                                                          ),
-                                                                         conditionalPanel(condition = "input.model=='elasticnet'", 
-                                                                                          conditionalPanel(condition ="input.help",
-                                                                                                           div(class =  "myDiv",
-                                                                                                               h4("ElasticNet Hyperparameters Explanation"),
-                                                                                                               p(strong("Alpha:"), "Controls the mix between L1 (Lasso) and L2 (Ridge) regularization.
+                                                                                       
+                                                                                  )
+                                                                                  # ,
+                                                                                  #   p("High C + high gamma → very flexible model, high risk of overfitting."),
+                                                                                  #   p("Low C + low gamma → very smooth model, risk of underfitting."),
+                                                                                  #   p("High C + low gamma → model that tries to classify well but with a generally smooth boundary."),
+                                                                                  #   p("Low C + high gamma → model that accepts errors but with complex local boundaries. ")
+                                                                                  
+                                                                                )
+                                                               ),
+                                                               conditionalPanel(condition ="input.model=='randomforest'",
+                                                                                div(
+                                                                                  class =  "myDiv",
+                                                                                  h4("Random Forest Hyperparameters Explanation"),
+                                                                                  p(strong("ntree:"), "Number of trees in the forest; more trees can improve performance but increase computation time."),
+                                                                                  p(strong("mtry:"), "Number of variables randomly sampled at each split; controls tree diversity and model robustness.")
+                                                                                )
+                                                               ),
+                                                               conditionalPanel(condition ="input.model=='xgboost'",
+                                                                                div(
+                                                                                  class =  "myDiv",
+                                                                                  h4("XGBoost Hyperparameters Explanation"),
+                                                                                  p(strong("nrounds:"), "Also known as num_boost_round; defines the number of boosting iterations."),
+                                                                                  p(strong("max_depth:"), "Maximum depth of a tree; controls model complexity and overfitting."),
+                                                                                  p(strong("eta (learning rate):"), "Step size shrinkage used to prevent overfitting; smaller values require more rounds.")
+                                                                                )
+                                                               ),
+                                                               conditionalPanel(condition = "input.model=='elasticnet'", 
+                                                                                conditionalPanel(condition ="input.help",
+                                                                                                 div(class =  "myDiv",
+                                                                                                     h4("ElasticNet Hyperparameters Explanation"),
+                                                                                                     p(strong("Alpha:"), "Controls the mix between L1 (Lasso) and L2 (Ridge) regularization.
                                                                                                                         Alpha=1 corresponds to Lasso, Alpha=0 to Ridge, and values in between represent a combination of both."),
-                                                                                                               p(strong("Lambda:"), "Lambda controls the strength of regularization.
+                                                                                                     p(strong("Lambda:"), "Lambda controls the strength of regularization.
                                                                                                                         Use automatic selection via cross-validation for optimal results.")
-                                                                                                               
-                                                                                                           )
-                                                                                          )  
-                                                                                        )
-                                                      ) # fin du grand conditionPanel
-                                                      ),
-                                                     conditionalPanel(condition ="output.fileUploadedval & input.model!='nomodel'  ",
-                                                                      checkboxInput("adjustval","Adjust model on validation data",F)
-                                                     )
-                                                     ,
-                                                     hr(),
-                                                     conditionalPanel(condition ="input.model!='nomodel'  ",
-                                                                      fluidRow(
-                                                                        column(4,
-                                                                               textOutput('nbselectmodel',inline=T),'selected variables',
-                                                                               h3("Model Learning")
-                                                                        ),
-                                                                        column(4,br(),downloadButton('downloaddatalearning', 'Download learning data')),
-                                                                        column(4,radioButtons("plotscoremodel", "",c( "boxplot"="boxplot","points" = "points")))
-                                                                      ),
-                                                                      conditionalPanel(condition ="input.model %in% c('coxelasticnet', 'coxlasso', 'coxridge', 'rsf')",
-                                                                                       fluidRow(
-                                                                                         column(12,
-                                                                                                h4("Optimal Hyperparameters (Training - Survival Models)"),
-                                                                                                conditionalPanel(condition ="input.model %in% c('coxelasticnet', 'coxlasso', 'coxridge')",
-                                                                                                                 div(
-                                                                                                                   class =  "well",
-                                                                                                                   style = 'color :  blue;',
-                                                                                                                   fluidRow(
-                                                                                                                     column(3, strong("Alpha:"), textOutput("modelalpha",inline=T)),
-                                                                                                                     column(3, strong("Lambda:"), textOutput("modellambda",inline=T)),
-                                                                                                                     column(3, strong("Lambda (1SE):"), textOutput("modellambda1se",inline=T)),
-                                                                                                                     column(3, strong("Non-zero coef:"), textOutput("modelnonzerocoef",inline=T))
-                                                                                                                   )
-                                                                                                                 )
-                                                                                                                 
-                                                                                                ),
-                                                                                                conditionalPanel(condition ="input.model=='rsf'",
-                                                                                                                 div(
-                                                                                                                   class =  "well",
-                                                                                                                   style = 'color :  blue;',
-                                                                                                                   fluidRow(
-                                                                                                                     column(4, strong("Optimal mtry:"), textOutput("rfmtry",inline=T)),
-                                                                                                                     column(4, strong("Number of trees:"), textOutput("rfntree",inline=T)),
-                                                                                                                     column(4, strong("Model type:"), "Random Survival Forest")
-                                                                                                                   )
-                                                                                                                 )
-                                                                                                ),
-                                                                                                hr()
-                                                                                         )
-                                                                                       )
-                                                                      ),
-                                                                      fluidRow(
-                                                                        column(6,
-                                                                               plotOutput("plotmodeldecouvroc")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                               p(downloadButton("downloadplotdecouvroc","Download plot"),
-                                                                                 downloadButton('downloaddatadecouvroc', 'Download raw data'),align="center")
-                                                                        ),
-                                                                        column(4,
-                                                                               plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                               p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
-                                                                                 downloadButton('downloaddatamodeldecouvbp', 'Download raw data'),align="center")
-                                                                        ),
-                                                                        column(2,
-                                                                               conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames1","show indivuals names",value=FALSE)),
-                                                                               br(),
-                                                                               h5("Risk Score Quantiles"),
-                                                                               tableOutput("tabmodeldecouv"),
-                                                                               br(),
-                                                                               h5("Survival Metrics"),
-                                                                               "C-index = ",textOutput("cindexdecouv",inline=T),
-                                                                               br(),
-                                                                               "Integrated Brier Score = ",textOutput("ibsdecouv",inline=T),
-                                                                               br(),hr(),br(),
-                                                                               h5("Median Survival by Group"),
-                                                                               tableOutput("survival_stats_learning")
-
-                                                                        )
-                                                                      ),
-                                                                      hr(),
-                                                                      h4("Time-Dependent Classification Metrics (Learning Set)"),
-                                                                      fluidRow(
-                                                                        column(8,
-                                                                               plotOutput("plot_temporal_classif_learning", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                               p(downloadButton("download_temporal_plot_learning","Download plot"),align="center")
-                                                                        ),
-                                                                        column(4,
-                                                                               h5("Confusion Matrix (at median time)"),
-                                                                               tableOutput("confusion_matrix_learning"),
-                                                                               br(),
-                                                                               h5("Temporal Metrics Summary"),
-                                                                               div(style = "overflow-x: auto; max-height: 300px;",
-                                                                                   tableOutput("table_temporal_metrics_learning")
-                                                                               )
-                                                                        )
-                                                                      ),
-                                                                      hr(),
-                                                                      conditionalPanel(condition ="input.adjustval==true  ",
-                                                                                       fluidRow(div(
-                                                                                         column(6,h3("model validation"))
-                                                                                         # , 
-                                                                                         # column(6,br(),downloadButton('downloaddatavalidation', 'Download validation data'))
-                                                                                         )
-                                                                                       ), 
-                                                                                       fluidRow(
-                                                                                         column(6,plotOutput("plotmodelvalroc")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                                                p(downloadButton("downloadplotvalroc","Download plot"),
-                                                                                                  downloadButton('downloaddatavalroc', 'Download raw data'),align="center")
-                                                                                         ),
-                                                                                         column(4,plotOutput("plotmodelvalbp")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                                                p(downloadButton("downloadplotmodelvalbp","Download plot"),
-                                                                                                  downloadButton('downloaddatamodelvalbp', 'Download raw data'),align="center")
-                                                                                         ),
-                                                                                         column(2,
-                                                                                                #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
-                                                                                                h5("Risk Score Quantiles"),
-                                                                                                tableOutput("tabmodelval"),
-                                                                                                br(),
-                                                                                                h5("Survival Metrics"),
-                                                                                                "C-index = ",textOutput("cindexval",inline=T),
-                                                                                                br(),
-                                                                                                "Integrated Brier Score = ",textOutput("ibsval",inline=T),
-                                                                                                br(),hr(),br(),
-                                                                                                h5("Median Survival by Group"),
-                                                                                                tableOutput("survival_stats_validation")
-
-                                                                                         )
-                                                                                       ),
-                                                                                       hr(),
-                                                                                       h4("Time-Dependent Classification Metrics (Validation Set)"),
-                                                                                       fluidRow(
-                                                                                         column(8,
-                                                                                                plotOutput("plot_temporal_classif_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                                                p(downloadButton("download_temporal_plot_validation","Download plot"),align="center")
-                                                                                         ),
-                                                                                         column(4,
-                                                                                                h5("Confusion Matrix (at median time)"),
-                                                                                                tableOutput("confusion_matrix_validation"),
-                                                                                                br(),
-                                                                                                h5("Temporal Metrics Summary"),
-                                                                                                div(style = "overflow-x: auto; max-height: 300px;",
-                                                                                                    tableOutput("table_temporal_metrics_validation")
-                                                                                                )
-                                                                                         )
-                                                                                       ),
-                                                                                       hr(),
-                                                                                       h4("Export Complete Results"),
-                                                                                       fluidRow(
-                                                                                         column(12,
-                                                                                                p("Download comprehensive results including all temporal metrics, confusion matrices, and model information:"),
-                                                                                                p(downloadButton("download_complete_results","Download Excel Report (.xlsx)"),
-                                                                                                  downloadButton("download_temporal_csv","Download CSV (Temporal Metrics)"),
-                                                                                                  align="center")
-                                                                                         )
-                                                                                       )
-                                                                      )
-                                                     )
-                                              )
+                                                                                                     
+                                                                                                 )
+                                                                                )  
+                                                               )
+                                              ) # fin du grand conditionPanel
                                             ),
+                                            conditionalPanel(condition ="output.fileUploadedval & input.model!='nomodel'  ",
+                                                             checkboxInput("adjustval","Adjust model on validation data",F)
+                                            )
+                                            ,
+                                            hr(),
+                                            conditionalPanel(condition ="input.model!='nomodel'  ",
+                                                             fluidRow(
+                                                               column(4,
+                                                                      textOutput('nbselectmodel',inline=T),'selected variables',
+                                                                      h3("Model Learning")
+                                                               ),
+                                                               column(4,br(),downloadButton('downloaddatalearning', 'Download learning data')),
+                                                               column(4,radioButtons("plotscoremodel", "",c( "boxplot"="boxplot","points" = "points")))
+                                                             ),
+                                                             conditionalPanel(condition ="input.model=='elasticnet' || input.model=='svm' || input.model=='randomforest' || input.model=='xgboost'",
+                                                                              fluidRow(
+                                                                                column(12,
+                                                                                       h4("Optimal Hyperparameters (Training)"),
+                                                                                       conditionalPanel(condition ="input.model=='elasticnet'",
+                                                                                                        div(
+                                                                                                          class =  "well",
+                                                                                                          style = 'color :  blue;',
+                                                                                                          fluidRow(
+                                                                                                            column(3, strong("Alpha:"), textOutput("modelalpha",inline=T)),
+                                                                                                            column(3, strong("Lambda:"), textOutput("modellambda",inline=T)),
+                                                                                                            column(3, strong("Lambda (1SE):"), textOutput("modellambda1se",inline=T)),
+                                                                                                            column(3, strong("Non-zero coef:"), textOutput("modelnonzerocoef",inline=T))
+                                                                                                          )
+                                                                                                        )
+                                                                                                        
+                                                                                       ),
+                                                                                       conditionalPanel(condition ="input.model=='svm'",
+                                                                                                        div(
+                                                                                                          class =  "well",
+                                                                                                          style = 'color :  blue;',
+                                                                                                          fluidRow(
+                                                                                                            column(4, strong("Cost (C):"), textOutput("svmcost",inline=T)),
+                                                                                                            column(4, strong("Gamma:"), textOutput("svmgamma",inline=T)),
+                                                                                                            column(4, strong("Kernel:"), textOutput("svmkernel",inline=T)
+                                                                                                                   #"Radial"
+                                                                                                            )
+                                                                                                          )
+                                                                                                        )
+                                                                                       ),
+                                                                                       conditionalPanel(condition ="input.model=='randomforest'",
+                                                                                                        div(
+                                                                                                          class =  "well",
+                                                                                                          style = 'color :  blue;',
+                                                                                                          fluidRow(
+                                                                                                            column(4, strong("Optimal mtry:"), textOutput("rfmtry",inline=T)),
+                                                                                                            column(4, strong("Number of trees:"), textOutput("rfntree",inline=T)),
+                                                                                                            column(4, strong("Tuning method:"), "tuneRF")
+                                                                                                          )
+                                                                                                        )
+                                                                                       ),
+                                                                                       conditionalPanel(condition ="input.model=='xgboost'",
+                                                                                                        div(
+                                                                                                          class =  "well",
+                                                                                                          style = 'color :  blue;',
+                                                                                                          fluidRow(
+                                                                                                            column(3, strong("Optimal nrounds:"), textOutput("xgbnrounds",inline=T)),
+                                                                                                            column(3, strong("Max depth:"), textOutput("xgbmaxdepth",inline=T)),
+                                                                                                            column(3, strong("Learning rate (eta):"), textOutput("xgbeta",inline=T)),
+                                                                                                            column(3, strong("Min child weight:"), textOutput("xgbminchild",inline=T))
+                                                                                                          )
+                                                                                                        )
+                                                                                       ),
+                                                                                       conditionalPanel( condition = "input.model=='knn'",
+                                                                                                         fluidRow(
+                                                                                                           column(3,
+                                                                                                                  strong("Optimal K in KNN:"), textOutput("knnk",inline=T)
+                                                                                                           )
+                                                                                                         )
+                                                                                       ),
+                                                                                       hr()
+                                                                                )
+                                                                              )
+                                                             ),
+                                                             fluidRow(
+                                                               column(6,
+                                                                      plotOutput("plotmodeldecouvroc")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                      p(downloadButton("downloadplotdecouvroc","Download plot"),
+                                                                        downloadButton('downloaddatadecouvroc', 'Download raw data'),align="center")
+                                                               ),
+                                                               column(4,
+                                                                      plotOutput("plotmodeldecouvbp")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                      p(downloadButton("downloadplotmodeldecouvbp","Download plot"),
+                                                                        downloadButton('downloaddatamodeldecouvbp', 'Download raw data'),align="center")
+                                                               ),
+                                                               column(2,
+                                                                      conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames1","show indivuals names",value=FALSE)),
+                                                                      br(),
+                                                                      h5("Risk Score Quantiles"),
+                                                                      tableOutput("tabmodeldecouv"),
+                                                                      br(),
+                                                                      h5("Survival Metrics"),
+                                                                      "C-index = ",textOutput("cindexdecouv",inline=T),
+                                                                      br(),
+                                                                      "Integrated Brier Score = ",textOutput("ibsdecouv",inline=T),
+                                                                      br(),hr(),br(),
+                                                                      h5("Median Survival by Group"),
+                                                                      tableOutput("survival_stats_learning")
+                                                                      
+                                                               )
+                                                             ),
+                                                             hr(),
+                                                             h4("Time-Dependent Classification Metrics (Learning Set)"),
+                                                             fluidRow(
+                                                               column(8,
+                                                                      plotOutput("plot_temporal_classif_learning", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                      p(downloadButton("download_temporal_plot_learning","Download plot"),align="center")
+                                                               ),
+                                                               column(4,
+                                                                      h5("Confusion Matrix (at median time)"),
+                                                                      tableOutput("confusion_matrix_learning"),
+                                                                      br(),
+                                                                      h5("Temporal Metrics Summary"),
+                                                                      div(style = "overflow-x: auto; max-height: 300px;",
+                                                                          tableOutput("table_temporal_metrics_learning")
+                                                                      )
+                                                               )
+                                                             ),
+                                                             hr(),
+                                                             conditionalPanel(condition ="input.adjustval==true  ",
+                                                                              fluidRow(div(
+                                                                                column(6,h3("model validation"))
+                                                                                # , 
+                                                                                # column(6,br(),downloadButton('downloaddatavalidation', 'Download validation data'))
+                                                                              )
+                                                                              ), 
+                                                                              fluidRow(
+                                                                                column(6,plotOutput("plotmodelvalroc")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                                       p(downloadButton("downloadplotvalroc","Download plot"),
+                                                                                         downloadButton('downloaddatavalroc', 'Download raw data'),align="center")
+                                                                                ),
+                                                                                column(4,plotOutput("plotmodelvalbp")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                                                       p(downloadButton("downloadplotmodelvalbp","Download plot"),
+                                                                                         downloadButton('downloaddatamodelvalbp', 'Download raw data'),align="center")
+                                                                                ),
+                                                                                column(2,
+                                                                                       #conditionalPanel(condition="input.plotscoremodel=='points'",checkboxInput("shownames2","show indivuals names",value=FALSE)),
+                                                                                       h5("Risk Score Quantiles"),
+                                                                                       tableOutput("tabmodelval"),
+                                                                                       br(),
+                                                                                       h5("Survival Metrics"),
+                                                                                       "C-index = ",textOutput("cindexval",inline=T),
+                                                                                       br(),
+                                                                                       "Integrated Brier Score = ",textOutput("ibsval",inline=T),
+                                                                                       br(),hr(),br(),
+                                                                                       h5("Median Survival by Group"),
+                                                                                       tableOutput("survival_stats_validation")
+                                                                                       
+                                                                                )
+                                                                              ),
+                                                                              hr(),
+                                                                              h4("Time-Dependent Classification Metrics (Validation Set)"),
+                                                                              fluidRow(
+                                                                                column(8,
+                                                                                       plotOutput("plot_temporal_classif_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                                       p(downloadButton("download_temporal_plot_validation","Download plot"),align="center")
+                                                                                ),
+                                                                                column(4,
+                                                                                       h5("Confusion Matrix (at median time)"),
+                                                                                       tableOutput("confusion_matrix_validation"),
+                                                                                       br(),
+                                                                                       h5("Temporal Metrics Summary"),
+                                                                                       div(style = "overflow-x: auto; max-height: 300px;",
+                                                                                           tableOutput("table_temporal_metrics_validation")
+                                                                                       )
+                                                                                )
+                                                                              ),
+                                                                              hr(),
+                                                                              h4("Export Complete Results"),
+                                                                              fluidRow(
+                                                                                column(12,
+                                                                                       p("Download comprehensive results including all temporal metrics, confusion matrices, and model information:"),
+                                                                                       p(downloadButton("download_complete_results","Download Excel Report (.xlsx)"),
+                                                                                         downloadButton("download_temporal_csv","Download CSV (Temporal Metrics)"),
+                                                                                         align="center")
+                                                                                )
+                                                                              )
+                                                             )
+                                            )
+                                   ),
+                                   tabPanel("Test Parameters", icon = icon("cog"),
                                             #textOutput("testNAstructure"),
                                             #hr(),
                                             fluidRow(
@@ -779,15 +811,14 @@ shinyUI(fluidPage(
                                             # Overfitting Analysis
                                             fluidRow(
                                               column(12,
-                                                h5("Overfitting Analysis"),
-                                                plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
-                                                helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
+                                                     h5("Overfitting Analysis"),
+                                                     plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                     p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
+                                                     helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
                                               )
                                             )
+                                     
                                    ),
-
-
                                    # New Survival Classif tab
                                    tabPanel("Survival Classif", icon = icon("chart-line"),
                                             fluidRow(
@@ -797,7 +828,7 @@ shinyUI(fluidPage(
                                               )
                                             ),
                                             hr(),
-
+                                            
                                             # Training Set Section
                                             fluidRow(
                                               column(12,
@@ -828,40 +859,40 @@ shinyUI(fluidPage(
                                               )
                                             ),
                                             hr(),
-
+                                            
                                             # Validation Set Section
                                             conditionalPanel(condition = "input.adjustval==true",
-                                                            fluidRow(
-                                                              column(12,
-                                                                     h4("Validation Set - Time-Dependent Classification", style = "color: #2C3E50; font-weight: bold;")
-                                                              )
-                                                            ),
-                                                            fluidRow(
-                                                              column(4,
-                                                                     h5("Confusion Matrix (at median time)"),
-                                                                     tableOutput("confusion_matrix_validation_tab"),
-                                                                     br(),
-                                                                     h5("Classification Metrics Summary"),
-                                                                     div(style = "overflow-x: auto; max-height: 250px;",
-                                                                         tableOutput("table_temporal_metrics_validation_tab")
-                                                                     )
-                                                              ),
-                                                              column(8,
-                                                                     h5("Time-Dependent ROC Curve (at median time)"),
-                                                                     plotOutput("plot_timeROC_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                     p(downloadButton("download_timeROC_validation","Download ROC plot"),align="center")
-                                                              )
-                                                            ),
-                                                            fluidRow(
-                                                              column(12,
-                                                                     h5("Risk Score Distribution with Youden Threshold (at median time)"),
-                                                                     plotOutput("plot_scatter_youden_validation", height = "300px") %>% withSpinner(color="#0dc5c1",type = 1),
-                                                                     p(downloadButton("download_scatter_validation","Download scatter plot"),align="center")
-                                                              )
-                                                            )
+                                                             fluidRow(
+                                                               column(12,
+                                                                      h4("Validation Set - Time-Dependent Classification", style = "color: #2C3E50; font-weight: bold;")
+                                                               )
+                                                             ),
+                                                             fluidRow(
+                                                               column(4,
+                                                                      h5("Confusion Matrix (at median time)"),
+                                                                      tableOutput("confusion_matrix_validation_tab"),
+                                                                      br(),
+                                                                      h5("Classification Metrics Summary"),
+                                                                      div(style = "overflow-x: auto; max-height: 250px;",
+                                                                          tableOutput("table_temporal_metrics_validation_tab")
+                                                                      )
+                                                               ),
+                                                               column(8,
+                                                                      h5("Time-Dependent ROC Curve (at median time)"),
+                                                                      plotOutput("plot_timeROC_validation", height = "400px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                      p(downloadButton("download_timeROC_validation","Download ROC plot"),align="center")
+                                                               )
+                                                             ),
+                                                             fluidRow(
+                                                               column(12,
+                                                                      h5("Risk Score Distribution with Youden Threshold (at median time)"),
+                                                                      plotOutput("plot_scatter_youden_validation", height = "300px") %>% withSpinner(color="#0dc5c1",type = 1),
+                                                                      p(downloadButton("download_scatter_validation","Download scatter plot"),align="center")
+                                                               )
+                                                             )                                                            
                                             ),
                                             hr(),
-
+                                            
                                             # Export section
                                             fluidRow(
                                               column(12,
@@ -873,7 +904,10 @@ shinyUI(fluidPage(
                                               )
                                             )
                                    )
-                       )
+                       ), # fin du tabsetPanel
+                       
       )
     )
+  )
+)
 )
