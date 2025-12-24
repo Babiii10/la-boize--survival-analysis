@@ -1349,54 +1349,111 @@ transformdata<-function(toto,transpose,zeroegalNA){
   
 toto<-as.data.frame(toto[,c(colnames(toto)[1],sort(colnames(toto)[-1]))])
 }
-confirmdata<-function(toto, invers = FALSE){
+confirmdata<-function(toto, invers = FALSE, time_col = NULL, status_col = NULL, id_col = NULL){
   toto<-as.data.frame(toto)
 
-  # For survival analysis: verify time and status columns exist
-  col_names <- tolower(colnames(toto))
-
-  # Check if columns 1 and 2 are time and status (expected structure)
-  if(ncol(toto) >= 2){
-    # Assume columns 1 and 2 are time and status
-    colnames(toto)[1] <- "time"
-    colnames(toto)[2] <- "status"
-
-    # Convert time to numeric
-    toto[,1] <- as.numeric(as.character(toto[,1]))
-
-    # Convert status to numeric and recode based on user preference
-    toto[,2] <- as.numeric(as.character(toto[,2]))
-
-    # Get unique status values (sorted)
-    unique_status <- sort(unique(toto[,2][!is.na(toto[,2])]))
-
-    # Recode status to 0 (censored) and 1 (event) based on invers parameter
-    if(!all(unique_status %in% c(0, 1))){
-      # User can define which value corresponds to event vs censored
-      if(length(unique_status) == 2){
-        if(invers){
-          # invers = TRUE: lowest value = censored (0), highest = event (1)
-          message("Status encoding: ", unique_status[1], " -> 0 (censored), ", unique_status[2], " -> 1 (event)")
-          toto[,2] <- ifelse(toto[,2] == unique_status[1], 0, 1)
-        } else {
-          # invers = FALSE: lowest value = event (1), highest = censored (0)
-          message("Status encoding: ", unique_status[1], " -> 1 (event), ", unique_status[2], " -> 0 (censored)")
-          toto[,2] <- ifelse(toto[,2] == unique_status[1], 1, 0)
-        }
-      } else {
-        stop("Status column must contain exactly 2 unique values. Found: ", paste(unique_status, collapse = ", "))
-      }
+  # Default behavior: if no columns specified, assume first two columns
+  if(is.null(time_col) && is.null(status_col)){
+    message("No columns specified, using default: columns 1 and 2 as time and status")
+    if(ncol(toto) < 2){
+      stop("Data must have at least 2 columns: time and status")
     }
-
-    # Convert remaining columns to numeric (features)
-    if(ncol(toto) > 2){
-      for (i in 3:ncol(toto)){
-        toto[,i] <- as.numeric(as.character(toto[,i]))
-      }
-    }
-  } else {
-    stop("Data must have at least 2 columns: time and status")
+    time_col <- colnames(toto)[1]
+    status_col <- colnames(toto)[2]
   }
+
+  # Validate that specified columns exist
+  if(!is.null(time_col) && !time_col %in% colnames(toto)){
+    stop("Time column '", time_col, "' not found in data. Available columns: ", paste(colnames(toto), collapse = ", "))
+  }
+  if(!is.null(status_col) && !status_col %in% colnames(toto)){
+    stop("Status column '", status_col, "' not found in data. Available columns: ", paste(colnames(toto), collapse = ", "))
+  }
+  if(!is.null(id_col) && id_col != "None (use row names)" && !id_col %in% colnames(toto)){
+    stop("ID column '", id_col, "' not found in data. Available columns: ", paste(colnames(toto), collapse = ", "))
+  }
+
+  # Reorder columns: put time and status first, then others
+  # Handle ID column if specified
+  if(!is.null(id_col) && id_col != "None (use row names)"){
+    # Use ID column as row names
+    rownames(toto) <- toto[[id_col]]
+    # Remove ID column from data
+    toto <- toto[, colnames(toto) != id_col, drop = FALSE]
+    # Update column references if needed
+    if(time_col == id_col) time_col <- colnames(toto)[1]
+    if(status_col == id_col) status_col <- colnames(toto)[1]
+  }
+
+  # Get all column names except time and status
+  other_cols <- setdiff(colnames(toto), c(time_col, status_col))
+
+  # Reorder: time, status, then all others
+  toto <- toto[, c(time_col, status_col, other_cols), drop = FALSE]
+
+  # Rename time and status columns to standard names
+  colnames(toto)[1] <- "time"
+  colnames(toto)[2] <- "status"
+
+  # Convert time to numeric and validate
+  toto[,1] <- as.numeric(as.character(toto[,1]))
+
+  # Validate time values
+  if(any(is.na(toto[,1]))){
+    na_count <- sum(is.na(toto[,1]))
+    warning("Time column contains ", na_count, " NA values. These rows will cause issues in survival analysis.")
+  }
+
+  if(any(toto[,1] <= 0, na.rm = TRUE)){
+    neg_count <- sum(toto[,1] <= 0, na.rm = TRUE)
+    stop("Time column must contain only positive values. Found ", neg_count, " values <= 0. Survival time must be > 0.")
+  }
+
+  # Convert status to numeric and recode based on user preference
+  toto[,2] <- as.numeric(as.character(toto[,2]))
+
+  # Validate status values
+  if(any(is.na(toto[,2]))){
+    na_count <- sum(is.na(toto[,2]))
+    warning("Status column contains ", na_count, " NA values. These rows will cause issues in survival analysis.")
+  }
+
+  # Get unique status values (sorted)
+  unique_status <- sort(unique(toto[,2][!is.na(toto[,2])]))
+
+  # Validate that status has exactly 2 values
+  if(length(unique_status) != 2){
+    stop("Status column must contain exactly 2 unique values (event and censored). Found: ",
+         length(unique_status), " unique values: ", paste(unique_status, collapse = ", "))
+  }
+
+  # Recode status to 0 (censored) and 1 (event) based on invers parameter
+  if(!all(unique_status %in% c(0, 1))){
+    # User can define which value corresponds to event vs censored
+    if(invers){
+      # invers = TRUE: lowest value = censored (0), highest = event (1)
+      message("Status encoding: ", unique_status[1], " -> 0 (censored), ", unique_status[2], " -> 1 (event)")
+      toto[,2] <- ifelse(toto[,2] == unique_status[1], 0, 1)
+    } else {
+      # invers = FALSE: lowest value = event (1), highest = censored (0)
+      message("Status encoding: ", unique_status[1], " -> 1 (event), ", unique_status[2], " -> 0 (censored)")
+      toto[,2] <- ifelse(toto[,2] == unique_status[1], 1, 0)
+    }
+  }
+
+  # Convert remaining columns to numeric (features)
+  if(ncol(toto) > 2){
+    for (i in 3:ncol(toto)){
+      toto[,i] <- as.numeric(as.character(toto[,i]))
+    }
+  }
+
+  # Final validation summary
+  n_events <- sum(toto[,2] == 1, na.rm = TRUE)
+  n_censored <- sum(toto[,2] == 0, na.rm = TRUE)
+  message("Data confirmed: ", nrow(toto), " observations, ",
+          n_events, " events, ", n_censored, " censored, ",
+          ncol(toto) - 2, " features")
 
   return(toto)
 }
@@ -1436,10 +1493,14 @@ importfunction<-function(importparameters){
       
     #}
     if(importparameters$confirmdatabutton!=0){
-      learning<-confirmdata(toto = learning, invers = importparameters$invers)
+      learning<-confirmdata(toto = learning,
+                           invers = importparameters$invers,
+                           time_col = importparameters$time_column,
+                           status_col = importparameters$status_column,
+                           id_col = importparameters$id_column)
 
       #learning<-learning[-which(apply(X = learning,MARGIN=1,function(x){sum(is.na(x))})==ncol(learning)),]
-      
+
 #       lev<-levels(x = tablearn[,1])
 #       print(lev)
 #       names(lev)<-c("positif","negatif")
@@ -1464,10 +1525,14 @@ importfunction<-function(importparameters){
       
     # }
     if(importparameters$confirmdatabutton!=0){
-      validation<-confirmdata(toto = validation, invers = importparameters$invers)
-      
+      validation<-confirmdata(toto = validation,
+                             invers = importparameters$invers,
+                             time_col = importparameters$time_column,
+                             status_col = importparameters$status_column,
+                             id_col = importparameters$id_column)
+
       #validation<-validation[-which(apply(X = validation,MARGIN=1,function(x){sum(is.na(x))})==ncol(validation)),]
-        
+
     }
     
   }
