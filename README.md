@@ -1,5 +1,15 @@
 # Application d'Analyse de Survie Hybride
 
+## ⚠️ CHANGEMENTS IMPORTANTS (Décembre 2024)
+
+**L'application supporte maintenant UNIQUEMENT les modèles de survie adaptés aux données censurées.**
+
+Les modèles de classification binaire (SVM, XGBoost, KNN, NaiveBayes, LightGBM) ont été **supprimés** car ils ne gèrent PAS correctement les données de survie censurées.
+
+📖 **Voir [SURVIVAL_MODELS.md](SURVIVAL_MODELS.md) pour la documentation complète des modèles supportés.**
+
+---
+
 ## 📊 Vue d'Ensemble
 
 Application Shiny R pour l'analyse de survie avec approche **hybride** innovante combinant :
@@ -43,6 +53,7 @@ Ou dans RStudio : Ouvrir `ui.R` et cliquer sur "Run App"
 
 | Document | Description | Public |
 |----------|-------------|--------|
+| [**SURVIVAL_MODELS.md**](SURVIVAL_MODELS.md) | ⭐ **Modèles supportés et changements récents** | 👨‍⚕️ Tous |
 | [**QUICK_START.md**](QUICK_START.md) | Guide de démarrage en 5 minutes | 👨‍⚕️ Utilisateurs |
 | [**USER_GUIDE.md**](USER_GUIDE.md) | Guide complet d'utilisation et d'interprétation | 👨‍⚕️ Utilisateurs |
 | [**SURVIVAL_ADAPTATION_GUIDE.md**](SURVIVAL_ADAPTATION_GUIDE.md) | Guide technique d'adaptation | 👨‍💻 Développeurs |

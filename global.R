@@ -2925,6 +2925,25 @@ tune_elasticnet_gridsearch <- function(X, y, param_grid = NULL, n_folds = 5, sco
 
 ####
 
+# ============================================================================
+# MODEL FUNCTION - SURVIVAL ANALYSIS ONLY (as of 2025-12-24)
+# ============================================================================
+# This function builds survival models for censored time-to-event data.
+#
+# SUPPORTED MODELS:
+#   - Cox Proportional Hazards (cox)
+#   - Random Survival Forest (rsf)
+#   - Penalized Cox: Lasso, ElasticNet, Ridge (coxlasso, coxelasticnet, coxridge)
+#
+# DEPRECATED MODELS (removed from UI, code retained for reference):
+#   - Classification models: SVM, XGBoost, LightGBM, KNN, NaiveBayes, RandomForest
+#   These models do NOT handle censored survival data correctly.
+#   They ignore time-to-event information and censoring status.
+#
+# IMPORTANT: Application now enforces survival models only via ui.R and server.R.
+# Classification model code below will never execute but is kept for reference.
+# ============================================================================
+
 modelfunction <- function(learningmodel,
                           validation=NULL,
                           modelparameters,
@@ -2942,6 +2961,10 @@ modelfunction <- function(learningmodel,
         stop("Survival models require 'time' and 'status' columns in data")
       }
     } else {
+      # DEPRECATED: Classification model support (code retained for reference)
+      # This branch should never execute as ui.R/server.R now restrict to survival models only
+      warning("Classification models are deprecated. Use Cox, RSF, or penalized Cox models for survival analysis.")
+
       # For classification models: expect group column
       colnames(learningmodel)[1]<-"group"
 
@@ -3037,7 +3060,17 @@ modelfunction <- function(learningmodel,
       predictclasslearning <- NULL
       classlearning <- NULL
 
+    # ========================================================================
+    # DEPRECATED CLASSIFICATION MODELS - Code retained for reference only
+    # ========================================================================
+    # NOTE: These models do not support censored survival data and should NOT be used.
+    # ui.R and server.R now prevent selection of these models.
+    # Code below will never execute but is kept for historical reference.
+    # ========================================================================
+
     } else if (modelparameters$modeltype=="randomforest"){
+      # DEPRECATED: RandomForest classification - does not handle censored data
+      warning("RandomForest classification is deprecated for survival analysis. Use Random Survival Forest (rsf) instead.")
       learningmodel<-as.data.frame(learningmodel[sort(rownames(learningmodel)),])
 
       x<-as.data.frame(learningmodel[,-1])
@@ -3164,6 +3197,8 @@ modelfunction <- function(learningmodel,
     }   
     
     if(modelparameters$modeltype=="svm"){
+      # DEPRECATED: SVM - does not handle censored survival data
+      warning("SVM is deprecated for survival analysis. Use Cox models instead.")
       # Determine hyperparameters
       if(is.null(modelparameters$autotunesvm) || modelparameters$autotunesvm){
         # Perform hyperparameter tuning using tune.svm
@@ -3247,6 +3282,8 @@ modelfunction <- function(learningmodel,
     }
 
     if(modelparameters$modeltype=="lightgbm"){
+      # DEPRECATED: LightGBM classification - does not handle censored survival data
+      warning("LightGBM is deprecated for survival analysis. Use Cox or RSF models instead.")
 
       # LightGBM gradient boosting
       x <- as.matrix(learningmodel[,-1])
@@ -3386,6 +3423,8 @@ modelfunction <- function(learningmodel,
     }
 
     if(modelparameters$modeltype=="naivebayes"){
+      # DEPRECATED: Naive Bayes - does not handle censored survival data
+      warning("Naive Bayes is deprecated for survival analysis. Use Cox models instead.")
       # Naive Bayes classifier
       # Check if GridSearchCV should be used
       optimal_laplace <- 0  # Default value
@@ -3447,6 +3486,8 @@ modelfunction <- function(learningmodel,
     }
 
     if(modelparameters$modeltype=="knn"){
+      # DEPRECATED: KNN - does not handle censored survival data
+      warning("KNN is deprecated for survival analysis. Use Cox or RSF models instead.")
       # K-Nearest Neighbors
       # Determine k parameter
       if(is.null(modelparameters$autotuneknn) || modelparameters$autotuneknn){
@@ -3628,6 +3669,8 @@ modelfunction <- function(learningmodel,
     }
 
     if(modelparameters$modeltype=="elasticnet"){
+      # DEPRECATED: ElasticNet classification - does not handle censored survival data
+      warning("ElasticNet classification is deprecated. Use Cox ElasticNet (coxelasticnet) for survival analysis.")
       # Penalized Logistic Regression (ElasticNet)
       x <- as.matrix(learningmodel[,-1])
       n_classes <- get_n_classes(learningmodel[,1])
@@ -3772,6 +3815,8 @@ modelfunction <- function(learningmodel,
     }
 
     if(modelparameters$modeltype=="xgboost"){
+      # DEPRECATED: XGBoost classification - does not handle censored survival data
+      warning("XGBoost is deprecated for survival analysis. Use Cox or RSF models instead.")
       # XGBoost gradient boosting
       x <- as.matrix(learningmodel[,-1])
       n_classes <- get_n_classes(learningmodel[,1])
@@ -4148,6 +4193,8 @@ modelfunction <- function(learningmodel,
       }
       
       if(modelparameters$modeltype=="svm"){
+      # DEPRECATED: SVM - does not handle censored survival data
+      warning("SVM is deprecated for survival analysis. Use Cox models instead.")
         if(!is.null(model)){
           if(n_classes_val == 2){
             # Binary: use decision values
@@ -4173,6 +4220,8 @@ modelfunction <- function(learningmodel,
       }
 
       if(modelparameters$modeltype=="elasticnet"){
+      # DEPRECATED: ElasticNet classification - does not handle censored survival data
+      warning("ElasticNet classification is deprecated. Use Cox ElasticNet (coxelasticnet) for survival analysis.")
         req(model$glmnet_model)
         x_val <- as.matrix(validationmodel)
         
@@ -4206,6 +4255,8 @@ modelfunction <- function(learningmodel,
         }
       }
       if(modelparameters$modeltype=="xgboost"){
+      # DEPRECATED: XGBoost classification - does not handle censored survival data
+      warning("XGBoost is deprecated for survival analysis. Use Cox or RSF models instead.")
         # XGBoost validation predictions
         x_val <- as.matrix(validationmodel)
         dval <- xgb.DMatrix(data = x_val)
@@ -4229,6 +4280,8 @@ modelfunction <- function(learningmodel,
       
 
       if(modelparameters$modeltype=="lightgbm"){
+      # DEPRECATED: LightGBM classification - does not handle censored survival data
+      warning("LightGBM is deprecated for survival analysis. Use Cox or RSF models instead.")
         # LightGBM validation predictions
         x_val <- as.matrix(validationmodel)
         predictions_raw_val <- predict(model, x_val)
@@ -4250,6 +4303,8 @@ modelfunction <- function(learningmodel,
       }
 
       if(modelparameters$modeltype=="naivebayes"){
+      # DEPRECATED: Naive Bayes - does not handle censored survival data
+      warning("Naive Bayes is deprecated for survival analysis. Use Cox models instead.")
         # Naive Bayes validation predictions
         pred_probs_val <- e1071:::predict.naiveBayes(model, validationmodel, type="raw")
         
@@ -4269,6 +4324,8 @@ modelfunction <- function(learningmodel,
       }
 
       if(modelparameters$modeltype=="knn"){
+      # DEPRECATED: KNN - does not handle censored survival data
+      warning("KNN is deprecated for survival analysis. Use Cox or RSF models instead.")
         # KNN validation predictions
         if(n_classes_val == 2){
           # Binary
