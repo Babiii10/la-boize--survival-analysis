@@ -6,9 +6,12 @@ THEMES = c( "cerulean", "cosmo", "cyborg", "darkly", "flatly", "journal",
             "quartz", "morph", "minty", #"vapor" ,
             "superhero")
 shinyUI(fluidPage(
+  # Initialize shinyFeedback for UI validation messages
+  shinyFeedback::useShinyFeedback(),
+
   theme = bslib::bs_theme(
     bootswatch = "cerulean",
-    #primary = "#EA80FC", 
+    #primary = "#EA80FC",
     secondary = "#48DAC6"
   ),
   # div(input_dark_mode(id = "mode",
