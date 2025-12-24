@@ -62,11 +62,110 @@ shinyServer(function(input, output,session) {
     return( !is.null(DATA()$VALIDATION))
   })
   outputOptions(output, 'fileUploadedval', suspendWhenHidden=FALSE)
-  
+
   output$modelUploadedval <- reactive({
     return(!is.null(DATA()$VALIDATION))
   })
   outputOptions(output, 'modelUploadedval', suspendWhenHidden=FALSE)
+
+  # Column selection logic - read columns from uploaded file before confirmation
+  available_columns <- reactive({
+    if(is.null(input$learningfile)) return(NULL)
+
+    # Read file temporarily to get column names
+    importparameters_temp <- list(
+      "learningfile" = input$learningfile,
+      "validationfile" = NULL,
+      "modelfile" = NULL,
+      "extension" = input$filetype,
+      "NAstring" = input$NAstring,
+      "sheetn" = input$sheetn,
+      "skipn" = input$skipn,
+      "dec" = input$dec,
+      "sep" = input$sep,
+      "transpose" = input$transpose,
+      "zeroegalNA" = input$zeroegalNA,
+      "confirmdatabutton" = 0,  # Not confirmed yet
+      "invers" = FALSE
+    )
+
+    tryCatch({
+      temp_data <- importfunction(importparameters_temp)
+      if(!is.null(temp_data$learning)){
+        return(colnames(temp_data$learning))
+      }
+    }, error = function(e) NULL)
+
+    return(NULL)
+  })
+
+  output$columnsAvailable <- reactive({
+    !is.null(available_columns()) && length(available_columns()) >= 2
+  })
+  outputOptions(output, 'columnsAvailable', suspendWhenHidden=FALSE)
+
+  # Dynamic UI for column selectors
+  output$time_col_selector <- renderUI({
+    cols <- available_columns()
+    if(is.null(cols)) return(NULL)
+
+    # Try to auto-detect time column
+    default_time <- NULL
+    time_patterns <- c("time", "temps", "duration", "duree", "survival", "survie", "days", "jours", "months", "mois")
+    for(pattern in time_patterns){
+      matches <- grep(pattern, cols, ignore.case = TRUE)
+      if(length(matches) > 0){
+        default_time <- cols[matches[1]]
+        break
+      }
+    }
+    if(is.null(default_time) && length(cols) >= 1) default_time <- cols[1]
+
+    selectInput("time_column", "Time Column:",
+                choices = cols,
+                selected = default_time)
+  })
+
+  output$status_col_selector <- renderUI({
+    cols <- available_columns()
+    if(is.null(cols)) return(NULL)
+
+    # Try to auto-detect status column
+    default_status <- NULL
+    status_patterns <- c("status", "statut", "event", "evenement", "censor", "censure", "death", "mort", "deceased", "decede")
+    for(pattern in status_patterns){
+      matches <- grep(pattern, cols, ignore.case = TRUE)
+      if(length(matches) > 0){
+        default_status <- cols[matches[1]]
+        break
+      }
+    }
+    if(is.null(default_status) && length(cols) >= 2) default_status <- cols[2]
+
+    selectInput("status_column", "Status Column:",
+                choices = cols,
+                selected = default_status)
+  })
+
+  output$id_col_selector <- renderUI({
+    cols <- available_columns()
+    if(is.null(cols)) return(NULL)
+
+    # Try to auto-detect ID column
+    default_id <- "None (use row names)"
+    id_patterns <- c("id", "patient", "subject", "sujet", "sample", "echantillon", "individu", "individual")
+    for(pattern in id_patterns){
+      matches <- grep(pattern, cols, ignore.case = TRUE)
+      if(length(matches) > 0){
+        default_id <- cols[matches[1]]
+        break
+      }
+    }
+
+    selectInput("id_column", "ID Column (optional):",
+                choices = c("None (use row names)", cols),
+                selected = default_id)
+  })
   
 #Save state#############  
   state <- reactiveValues()
@@ -173,13 +272,22 @@ shinyServer(function(input, output,session) {
     table[2,1:9]<-c("import parameters",learningfile$type,input$dec,input$sep,input$NAstring,
                          input$sheetn,input$skipn,input$zeroegalNA,input$transpose)
 
-    table[3,]<-c("#","name learning file", "number of rows", "number of columns", paste("number of ",levels(DATA()$LEARNING[,1])[1]),
-             paste("number of ",levels(DATA()$LEARNING[,1])[2]),"name validation file", "number of rows", "number of columns", paste("number of ",levels(DATA()$VALIDATION[,1])[1]),
-             paste("number of ",levels(DATA()$VALIDATION[,1])[2]))
-    table[4,]<-c("main results",learningfile$name,dim(DATA()$LEARNING)[1],dim(DATA()$LEARNING)[2],nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[1])),
-                 nll(sum(DATA()$LEARNING[,1]==levels(DATA()$LEARNING[,1])[2])),nll(input$validationfile$name),nll(dim(DATA()$VALIDATION)[1]),
-                 nll(dim(DATA()$VALIDATION)[2]),nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[1])),
-                 nll(sum(DATA()$VALIDATION[,1]==levels(DATA()$VALIDATION[,1])[2])))
+    # For survival analysis: show events and censored counts instead of class levels
+    table[3,]<-c("#","name learning file", "number of rows", "number of columns", "number of events",
+             "number of censored","name validation file", "number of rows", "number of columns", "number of events",
+             "number of censored")
+
+    # Calculate events (status=1) and censored (status=0) for learning and validation sets
+    n_events_learn <- if("status" %in% colnames(DATA()$LEARNING)) sum(DATA()$LEARNING$status == 1, na.rm = TRUE) else "N/A"
+    n_censored_learn <- if("status" %in% colnames(DATA()$LEARNING)) sum(DATA()$LEARNING$status == 0, na.rm = TRUE) else "N/A"
+
+    n_events_val <- if(!is.null(DATA()$VALIDATION) && "status" %in% colnames(DATA()$VALIDATION)) sum(DATA()$VALIDATION$status == 1, na.rm = TRUE) else "N/A"
+    n_censored_val <- if(!is.null(DATA()$VALIDATION) && "status" %in% colnames(DATA()$VALIDATION)) sum(DATA()$VALIDATION$status == 0, na.rm = TRUE) else "N/A"
+
+    table[4,]<-c("main results",learningfile$name,dim(DATA()$LEARNING)[1],dim(DATA()$LEARNING)[2],
+                 n_events_learn, n_censored_learn,
+                 nll(input$validationfile$name),nll(dim(DATA()$VALIDATION)[1]),
+                 nll(dim(DATA()$VALIDATION)[2]),n_events_val, n_censored_val)
     table[5,1:8]<-c("#","percentage of values minimum","method of selection","select features structured","search structur in",
                      "threshold p-value of proportion test", "maximum % values of the min group","minimum % values of the max group")
     table[6,1:8]<-c("select parameters",selectdataparameters[[1]],selectdataparameters[[2]],selectdataparameters[[3]],
@@ -211,25 +319,28 @@ shinyServer(function(input, output,session) {
       #                  round(MODEL()$modelparameters$thresholdmodel, 3),
       #                  input$fs,input$adjustval,input$invers)
       
-      table[19,1:8]<-c("#","number of features","AUC learning","sensibility learning","specificity learning","AUC validation","sensibility validation","specificity validation")
-#       line20<<-c("main results",dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
-#                  as.numeric(auc(roc(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning))),
-#                  sensibility(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-#                  specificity(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-#                  as.numeric(auc(roc(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval))),
-#                  sensibility(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval),
-#                  specificity(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval)
-#       )
-      table[20,1:5]<-c("main results",dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
-                  round(as.numeric(auc(roc(MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$scorelearning))),digits = 3),
-                  sensibility(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning),
-                  specificity(MODEL()$DATALEARNINGMODEL$reslearningmodel$predictclasslearning,MODEL()$DATALEARNINGMODEL$reslearningmodel$classlearning)
-                  )
+      # For survival analysis: use C-index and IBS instead of AUC/sensitivity/specificity
+      table[19,1:6]<-c("#","number of features","C-index learning","IBS learning","C-index validation","IBS validation")
+
+      # Extract survival metrics from MODEL() - they should be calculated during model building
+      table[20,1:3]<-c("main results",
+                       dim(MODEL()$DATALEARNINGMODEL$learningmodel)[2]-1,
+                       round(MODEL()$DATALEARNINGMODEL$reslearningmodel$cindex_learning, digits = 3))
+
+      # Add IBS if available
+      if(!is.null(MODEL()$DATALEARNINGMODEL$reslearningmodel$ibs_learning)){
+        table[20,4]<-round(MODEL()$DATALEARNINGMODEL$reslearningmodel$ibs_learning, digits = 3)
+      } else {
+        table[20,4]<-"N/A"
+      }
+
       if(input$adjustval){
-      table[20,6:8]<-c(round(as.numeric(auc(roc(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$scoreval))),digits = 3),
-                  sensibility(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval),
-                  specificity(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$predictclassval,MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$classval)
-                  )
+        table[20,5]<-round(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$cindex_validation, digits = 3)
+        if(!is.null(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$ibs_validation)){
+          table[20,6]<-round(MODEL()$DATAVALIDATIONMODEL$resvalidationmodel$ibs_validation, digits = 3)
+        } else {
+          table[20,6]<-"N/A"
+        }
       }
     }
     return(table)
@@ -308,11 +419,12 @@ shinyServer(function(input, output,session) {
   #si erreur envoyÃÂÃÂ© pb import
   DATA<-reactive({
      # Require that either a learning file or a model file is uploaded before proceeding
-     
+
 
      importparameters<<-list("learningfile"=input$learningfile,"validationfile"=input$validationfile,"modelfile"=input$modelfile,"extension" = input$filetype,
                             "NAstring"=input$NAstring,"sheetn"=input$sheetn,"skipn"=input$skipn,"dec"=input$dec,"sep"=input$sep,
-                            "transpose"=input$transpose,"zeroegalNA"=input$zeroegalNA,confirmdatabutton=input$confirmdatabutton,invers=input$invers)
+                            "transpose"=input$transpose,"zeroegalNA"=input$zeroegalNA,confirmdatabutton=input$confirmdatabutton,invers=input$invers,
+                            "time_column"=input$time_column,"status_column"=input$status_column,"id_column"=input$id_column)
 
      out<-tryCatch(importfunction(importparameters),error=function(e) e )
 #      if(any(class(out)=="error"))print("error")
@@ -320,9 +432,9 @@ shinyServer(function(input, output,session) {
      validate(need(any(class(out)!="error"),"error import"))
      resimport<<-out
       #resimport<-importfunction(importparameters)
-    list(LEARNING=resimport$learning, 
+    list(LEARNING=resimport$learning,
          VALIDATION=resimport$validation,
-        previousparameters=resimport$previousparameters  
+        previousparameters=resimport$previousparameters
 #          LEVELS=resimport$lev
          )
   })

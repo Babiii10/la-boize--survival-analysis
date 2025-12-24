@@ -78,7 +78,21 @@ shinyUI(fluidPage(
                                           checkboxInput("zeroegalNA","consider 0 as NA",FALSE)
                          )
                          ,
-                         actionButton("confirmdatabutton","Confirm data", 
+                         hr(),
+                         conditionalPanel(condition = "output.columnsAvailable",
+                                          h4("Column Selection for Survival Analysis"),
+                                          conditionalPanel(condition ="input.help",
+                                                           helpText("Select which columns contain time, status, and optional patient ID.")),
+                                          fluidRow(
+                                            column(6, uiOutput("time_col_selector")),
+                                            column(6, uiOutput("status_col_selector"))
+                                          ),
+                                          fluidRow(
+                                            column(12, uiOutput("id_col_selector"))
+                                          )
+                         ),
+                         hr(),
+                         actionButton("confirmdatabutton","Confirm data",
                                       style = "background-color: #63BFBF;
                                   color: white;
                                   border-color: #63BFBF;"),
