@@ -276,13 +276,12 @@ shinyUI(fluidPage(
                                                      conditionalPanel(condition ="input.help",helpText("The shapiro test is a test of normallity. The F test is a test of equality of variance."))
                                               ),
                                               column(6,br(),
-                                                     conditionalPanel(condition ="input.test %in% c('coxwald', 'logrank')",
+                                                     conditionalPanel(condition ="input.test=='Wtest' || input.test=='Ttest'",
+                                                                      numericInput("thresholdFC","Fold change threshold" , 0, min =0, max = 5, step = 0.5),
+                                                                      conditionalPanel(condition ="input.help",helpText("Fold Change is the ratio of means between groups.")),
                                                                       numericInput("thresholdpv","p-value threshold" , 0.05, min =0, max = 1, step = 0.01),
-                                                                      checkboxInput("adjustpv", "adjust p-value (Benjamini-Hochberg)" , value = FALSE),
-                                                                      conditionalPanel(condition ="input.help",
-                                                                                       helpText("P-value threshold for variable selection"),
-                                                                                       helpText("Cox Wald test: Tests association between each variable and survival"),
-                                                                                       helpText("Log-rank test: Non-parametric test for survival differences"))
+                                                                      checkboxInput("adjustpv", "adjust p-value " , value = FALSE),
+                                                                      conditionalPanel(condition ="input.help", helpText("Benjamini & Hochberg correction"))
                                                      ),
                                                      conditionalPanel(condition ="input.test=='clustEnet'",
                                                                       h5("Clustering + ElasticNet Parameters"),
@@ -297,9 +296,9 @@ shinyUI(fluidPage(
                                                                       checkboxInput("preprocessclustenet","Preprocess variables",TRUE),
                                                                       conditionalPanel(condition ="input.help",helpText("Filter low variance and low frequency variables before clustering."))
                                                      ),
-                                                     conditionalPanel(condition ="input.test %in% c('coxlasso', 'coxelasticnet', 'coxridge')",
+                                                     conditionalPanel(condition ="input.test=='lasso' || input.test=='elasticnet' || input.test=='ridge'",
                                                                       h5("Regularization Parameters"),
-                                                                      conditionalPanel(condition ="input.test=='coxelasticnet'",
+                                                                      conditionalPanel(condition ="input.test=='elasticnet'",
                                                                                        numericInput("alphaselection","Alpha (ElasticNet mixing)" , 0.5, min =0, max = 1, step = 0.1),
                                                                                        conditionalPanel(condition ="input.help",helpText("Alpha=1: Lasso, Alpha=0: Ridge, 0<Alpha<1: ElasticNet"))
                                                                       ),
@@ -313,7 +312,7 @@ shinyUI(fluidPage(
                                             ),br(),
                                             p(downloadButton('downloaddatastatistics', 'Download statistics'),downloadButton('downloadddatadiff', 'Download differently expressed variables'),align="center"),
                                             hr(),
-                                            conditionalPanel(condition= "input.test %in% c('coxwald', 'logrank')",
+                                            conditionalPanel(condition= "input.test== 'Wtest' || input.test== 'Ttest'",
                                                              fluidRow(
                                                                column(6,
                                                                       textOutput("nvarselect2",inline=T), "selected variables",
@@ -402,8 +401,7 @@ shinyUI(fluidPage(
                                                      helpText("/!\\ process can be long")
                                               ),
                                               column(4,
-                                                     # Hyperparameters for survival models only
-                                                     conditionalPanel(condition ="input.model %in% c('coxelasticnet')",
+                                                     conditionalPanel(condition ="input.model=='elasticnet'",
                                                                       h5("ElasticNet Hyperparameters"),
                                                                       radioButtons("tuning_method_en", "Tuning method:",
                                                                                    c(
@@ -423,25 +421,133 @@ shinyUI(fluidPage(
                                                                                        numericInput("lambdamodel","Lambda" , 0.01, min =0, max = 10, step = 0.01)
                                                                       )
                                                      ),
-                                                     # Hyperparameters for Random Survival Forest
-                                                     conditionalPanel(condition ="input.model=='rsf'",
-                                                                      h5("Random Survival Forest Hyperparameters"),
-                                                                      numericInput("ntreerf","Number of trees" , 500, min =100, max = 2000, step = 100),
+                                                     conditionalPanel(condition ="input.model=='randomforest'",
+                                                                      h5("Random Forest Hyperparameters"),
+                                                                      radioButtons("tuning_method_rf", "Tuning method:",
+                                                                                   c("Manual parameters" = "manual",
+                                                                                     "tuneRF" = "traditional",
+                                                                                     "GridSearchCV (superml)" = "gridsearch"),
+                                                                                   selected = "traditional"),
                                                                       conditionalPanel(condition ="input.help",
-                                                                                       helpText("Number of survival trees to grow. More trees improve stability but increase computation time."),
-                                                                                       helpText("The mtry parameter (variables per split) is automatically optimized."))
-                                                     )
-                                                     # END OF HYPERPARAMETER SECTIONS
-                                                     # Classification models (randomforest, svm, xgboost, lightgbm, naivebayes, knn) removed
+                                                                                       helpText("Manual: set mtry manually"),
+                                                                                       helpText("tuneRF: optimizes mtry only"),
+                                                                                       helpText("GridSearchCV: optimizes ntree, mtry, nodesize")),
+                                                                      numericInput("ntreerf","Number of trees" , 1000, min =100, max = 5000, step = 100),
+                                                                      conditionalPanel(condition ="input.tuning_method_rf=='manual'",
+                                                                                       numericInput("mtryrf","mtry (variables per split)" , 5, min =1, max = 100, step = 1),
+                                                                                       conditionalPanel(condition ="input.help",
+                                                                                                        helpText("Number of variables randomly sampled at each split"))
+                                                                      )
+                                                                      # ,
+                                                                      # conditionalPanel("input.help" #, 
+                                                                      #                  
+                                                                      # )
                                                      ),
-                                                      # affcihage des help en fonction du model
-                                                      fluidRow(
-                                                        conditionalPanel("input.help", 
-                                                                          conditionalPanel(condition ="input.model=='knn'",
-                                                                                        div(
-                                                                                            class =  "myDiv",
-                                                                                            h4("KNN Hyperparameter Explanation"),
-                                                                                            p(strong("Number of Neighbors (k):"), "Determines how many nearest neighbors are considered when classifying a new data point. 
+                                                     conditionalPanel(condition ="input.model=='svm'",
+                                                                      h5("SVM Hyperparameters"),
+                                                                      checkboxInput("autotunesvm", "Automatic hyperparameter tuning (tune.svm)" , value = FALSE),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("Automatically find optimal cost and gamma")
+                                                                      ),
+                                                                      conditionalPanel(condition ="!input.autotunesvm",
+                                                                                       numericInput("costsvm","Cost (C)" , 1, min =0.001, max = 100, step = 0.1),
+                                                                                       numericInput("gammasvm","Gamma" , 0.1, min =0.00001, max = 10, step = 0.01),
+                                                                                       selectInput("kernelsvm", "Kernel type:",
+                                                                                                   c("Radial" = "radial",
+                                                                                                     "Linear" = "linear",
+                                                                                                     "Polynomial" = "polynomial",
+                                                                                                     "Sigmoid" = "sigmoid"),
+                                                                                                   selected = "radial"),
+                                                                                       conditionalPanel(condition ="input.help",
+                                                                                                        helpText("Manually set SVM hyperparameters")
+                                                                                       )
+                                                                      )
+                                                                      # ,
+                                                                      # conditionalPanel(condition ="input.help"
+                                                                      #                  
+                                                                      # )
+                                                     ),
+                                                     conditionalPanel(condition ="input.model=='xgboost'",
+                                                                      h5("XGBoost Hyperparameters"),
+                                                                      radioButtons("tuning_method_xgb", "Tuning method:",
+                                                                                   c("Manual parameters" = "manual",
+                                                                                     "Cross-validation (xgb.cv)" = "traditional",
+                                                                                     "GridSearchCV (superml)" = "gridsearch"),
+                                                                                   selected = "traditional"),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("Manual: set all parameters manually"),
+                                                                                       helpText("xgb.cv: basic cross-validation"),
+                                                                                       helpText("GridSearchCV: comprehensive multi-parameter tuning")),
+                                                                      conditionalPanel(condition ="input.tuning_method_xgb=='manual'",
+                                                                                       bslib::tooltip(
+                                                                                         numericInput("nroundsxgb","Number of rounds" , 100, min =10, max = 1000, step = 10),
+                                                                                         placement =  "right",
+                                                                                         htmltools::span("Also known as num_boost_round; defines the number of boosting iterations.")
+                                                                                       ),
+                                                                                       numericInput("maxdepthxgb","Max depth" , 6, min =1, max = 20, step = 1),
+                                                                                       numericInput("etaxgb","Learning rate (eta)" , 0.3, min =0.01, max = 1, step = 0.01),
+                                                                                       conditionalPanel(condition ="input.help",helpText("Manually set XGBoost hyperparameters"))
+                                                                      )
+                                                                      # ,
+                                                                      # conditionalPanel("input.help" 
+                                                                      #  
+                                                                      # )
+                                                     ),
+                                                     conditionalPanel(condition ="input.model=='lightgbm'",
+                                                                      h5("LightGBM Hyperparameters"),
+                                                                      checkboxInput("autotunelgb", "Automatic hyperparameter tuning (CV)" , value = TRUE),
+                                                                      conditionalPanel(condition ="input.help",helpText("Automatically find optimal parameters via cross-validation")),
+                                                                      conditionalPanel(condition ="!input.autotunelgb",
+                                                                                       numericInput("nroundslgb","Number of rounds" , 100, min =10, max = 1000, step = 10),
+                                                                                       numericInput("numleaves","Num leaves" , 31, min =10, max = 200, step = 5),
+                                                                                       numericInput("learningratelgb","Learning rate" , 0.05, min =0.001, max = 0.5, step = 0.01),
+                                                                                       conditionalPanel(condition ="input.help",helpText("Manually set LightGBM hyperparameters"))
+                                                                      )
+                                                     ),
+                                                     
+                                                     conditionalPanel(condition ="input.model=='naivebayes'",
+                                                                      h5("Naive Bayes Hyperparameters"),
+                                                                      radioButtons("tuning_method_nb", "Tuning method:",
+                                                                                   c("No tuning (laplace=0)" = "manual",
+                                                                                     "GridSearchCV (superml)" = "gridsearch"),
+                                                                                   selected = "manual"),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("No tuning: uses default laplace=0"),
+                                                                                       helpText("GridSearchCV: optimizes laplace smoothing parameter"))
+                                                                      #,  conditionalPanel("input.help" )
+                                                     ),
+                                                     
+                                                     conditionalPanel(condition ="input.model=='knn'",
+                                                                      h5("KNN Hyperparameters"),
+                                                                      radioButtons("tuning_method_knn", "Tuning method:",
+                                                                                   c("Manual parameters" = "manual",
+                                                                                     "Cross-validation" = "traditional"
+                                                                                     # ,
+                                                                                     # "GridSearchCV (superml)" = "gridsearch"
+                                                                                   ),
+                                                                                   selected = "manual"),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("Manual: set k manually"),
+                                                                                       helpText("Traditional CV: basic cross-validation for k"),
+                                                                                       helpText("GridSearchCV: systematic grid search")),
+                                                                      conditionalPanel(condition ="input.tuning_method_knn=='manual'",
+                                                                                       numericInput("kneighbors","Number of neighbors (k)" , 5, min =1, max = 50, step = 2),
+                                                                                       conditionalPanel(condition ="input.help",
+                                                                                                        helpText("Manually set k parameter"))
+                                                                      )
+                                                     ) 
+                                              ) 
+                                              
+                                              # )$$
+                                            ),
+                                            # affcihage des help en fonction du model
+                                            fluidRow(
+                                              conditionalPanel("input.help", 
+                                                               conditionalPanel(condition ="input.model=='knn'",
+                                                                                div(
+                                                                                  class =  "myDiv",
+                                                                                  h4("KNN Hyperparameter Explanation"),
+                                                                                  p(strong("Number of Neighbors (k):"), "Determines how many nearest neighbors are considered when classifying a new data point. 
                                                                                            A smaller k can capture local patterns but may be sensitive to noise, while a larger k provides smoother decision boundaries but may overlook local nuances."
                                                                                   )
                                                                                 )
@@ -765,14 +871,16 @@ shinyUI(fluidPage(
                                                      #                      "Random Forest"="randomforest",
                                                      #                      "Support Vector Machine" = "svm"),
                                                      #                    selected = "svm")
-                                                     checkboxGroupInput("modeltest", "Type of survival model to test",
+                                                     checkboxGroupInput("modeltest", "Type of model to adjust",
                                                                         c("No model" = "nomodel",
-                                                                          "Cox Proportional Hazards" = "cox",
-                                                                          "Random Survival Forest" = "rsf",
-                                                                          "Cox Lasso" = "coxlasso",
-                                                                          "Cox ElasticNet" = "coxelasticnet",
-                                                                          "Cox Ridge" = "coxridge"),
-                                                                        selected = "cox")
+                                                                          "Random Forest"="randomforest",
+                                                                          "Support Vector Machine" = "svm",
+                                                                          "ElasticNet"="elasticnet",
+                                                                          "XGBoost"="xgboost",
+                                                                          # "LightGBM"="lightgbm",  
+                                                                          "K-Nearest Neighbors"="knn",
+                                                                          "Naive Bayes"="naivebayes"),
+                                                                        selected = "svm")
                                               ),
                                               column(4,
                                                      #numericInput("thresholdmodeltest","threshold model" ,0, min = -1, max = 1, step = 0.05),
@@ -889,7 +997,7 @@ shinyUI(fluidPage(
                                                                       plotOutput("plot_scatter_youden_validation", height = "300px") %>% withSpinner(color="#0dc5c1",type = 1),
                                                                       p(downloadButton("download_scatter_validation","Download scatter plot"),align="center")
                                                                )
-                                                             )                                                            
+                                                             )
                                             ),
                                             hr(),
                                             
