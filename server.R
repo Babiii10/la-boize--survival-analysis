@@ -906,19 +906,19 @@ MODEL<-reactive({
   })
 
 
+# Threshold observer for survival models
+# Note: For survival models, threshold is used for risk score dichotomization
 observe({
-  if (input$model=="svm") { updateNumericInput(session, "thresholdmodel", value = 0)}
-  else if (input$model=="randomforest"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="elasticnet"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="xgboost"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="lightgbm"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="naivebayes"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="knn"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
+  if (input$model %in% c("cox", "rsf", "coxlasso", "coxelasticnet", "coxridge")) {
+    updateNumericInput(session, "thresholdmodel", value = 0)  # Default threshold for risk scores
+  }
+  # REMOVED: Classification models (svm, randomforest, elasticnet, xgboost, lightgbm, naivebayes, knn)
+  # These models do not handle censored survival data correctly
 })
 
-# Display optimal hyperparameters for models
+# Display optimal hyperparameters for survival models
 output$modelalpha<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+  if(input$model %in% c("coxelasticnet") && !is.null(MODEL()$MODEL)){
     format(MODEL()$MODEL$alpha, digits = 3)
   } else {
     "N/A"
@@ -926,7 +926,7 @@ output$modelalpha<-renderText({
 })
 
 output$modellambda<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL)){
     format(MODEL()$MODEL$optimal_lambda, scientific = TRUE, digits = 4)
   } else {
     "N/A"
@@ -934,7 +934,7 @@ output$modellambda<-renderText({
 })
 
 output$modellambda1se<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
     format(MODEL()$MODEL$lambda_1se, scientific = TRUE, digits = 4)
   } else {
     "N/A"
@@ -942,44 +942,24 @@ output$modellambda1se<-renderText({
 })
 
 output$modelnonzerocoef<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
-    coef_matrix <- as.matrix(coef(MODEL()$MODEL$glmnet_model, s=MODEL()$MODEL$lambda))
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL)){
+    coef_matrix <- as.matrix(coef(MODEL()$MODEL, s=MODEL()$MODEL$lambda))
     sum(coef_matrix[-1,1] != 0)
   } else {
     "N/A"
   }
 })
 
-output$svmcost<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$cost, digits = 4)
-  } else {
-    "N/A"
-  }
-})
+# REMOVED: Classification model outputs (SVM, XGBoost, LightGBM, KNN)
+# These models do not support censored survival data
+# output$svmcost, output$svmgamma, output$svmkernel - REMOVED (SVM not supported)
+# output$xgbnrounds, output$xgbmaxdepth, output$xgbeta, output$xgbminchild - REMOVED (XGBoost not supported)
+# output$lgbnrounds, output$lgbnumleaves, output$lgblearningrate - REMOVED (LightGBM not supported)
+# output$knnk - REMOVED (KNN not supported)
 
-output$svmgamma<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$gamma, scientific = TRUE, digits = 4)
-  } else {
-    "N/A"
-  }
-})
-
-output$svmkernel<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$kernel
-    cat("Kernel  type  :  ", MODEL()$MODEL$kernel, "\n")
-    cat("kernel :", MODEL()$modelparameters$kernel, " \n")
-    cat("Kernel  :  ", input$kernelsvm, "\n")
-    input$kernelsvm
-  } else {
-    "N/A"
-  }
-  })
-
+# Random Survival Forest hyperparameters (for RSF model)
 output$rfmtry<-renderText({
-  if(input$model=="randomforest" && !is.null(MODEL()$MODEL)){
+  if(input$model=="rsf" && !is.null(MODEL()$MODEL)){
     MODEL()$MODEL$optimal_mtry
   } else {
     "N/A"
@@ -987,89 +967,21 @@ output$rfmtry<-renderText({
 })
 
 output$rfntree<-renderText({
-  if(input$model=="randomforest" && !is.null(MODEL()$MODEL)){
+  if(input$model=="rsf" && !is.null(MODEL()$MODEL)){
     MODEL()$MODEL$ntree_used
   } else {
     "N/A"
   }
 })
 
-output$optiTuning_K = renderText({
-  if(input$model=="knn" && !is.null(MODEL()$MODEL)){
-    cat("the optimal k is :", MODEL()$MODEL$optimal_k, " \n")
-     MODEL()$MODEL$optimal_k
-  } else {
-    "N/A"
-  }
-})
+# COMMENTED OUT: Classification model hyperparameter outputs
+# These models (KNN, XGBoost, LightGBM) do not support censored survival data
+# and have been removed from the application
 
-output$xgbnrounds<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_nrounds
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbmaxdepth<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_max_depth
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbeta<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$optimal_eta, digits = 3)
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbminchild<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_min_child_weight
-  } else {
-    "N/A"
-  }
-})
-
- output$lgbnrounds<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_nrounds
-  } else {
-    "N/A"
-  }
-})
-
- 
-
-output$lgbnumleaves<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_num_leaves
-  } else {
-    "N/A"
-  }
-
-})
-
-output$lgblearningrate<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$optimal_learning_rate, digits = 3)
-  } else {
-    "N/A"
-  }
-})
-
- 
-output$knnk<-renderText({
-  if(input$model=="knn" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_k
-  } else {
-    "N/A"
-  }
-}) 
+# output$optiTuning_K = renderText({ ... })  # KNN - REMOVED
+# output$xgbnrounds, output$xgbmaxdepth, output$xgbeta, output$xgbminchild - XGBoost - REMOVED
+# output$lgbnrounds, output$lgbnumleaves, output$lgblearningrate - LightGBM - REMOVED
+# output$knnk - KNN - REMOVED 
 
 
 ####
