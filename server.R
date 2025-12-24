@@ -906,19 +906,19 @@ MODEL<-reactive({
   })
 
 
+# Threshold observer for survival models
+# Note: For survival models, threshold is used for risk score dichotomization
 observe({
-  if (input$model=="svm") { updateNumericInput(session, "thresholdmodel", value = 0)}
-  else if (input$model=="randomforest"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="elasticnet"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="xgboost"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="lightgbm"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="naivebayes"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
-  else if (input$model=="knn"){  updateNumericInput(session, "thresholdmodel", value = 0.5)}
+  if (input$model %in% c("cox", "rsf", "coxlasso", "coxelasticnet", "coxridge")) {
+    updateNumericInput(session, "thresholdmodel", value = 0)  # Default threshold for risk scores
+  }
+  # REMOVED: Classification models (svm, randomforest, elasticnet, xgboost, lightgbm, naivebayes, knn)
+  # These models do not handle censored survival data correctly
 })
 
-# Display optimal hyperparameters for models
+# Display optimal hyperparameters for survival models
 output$modelalpha<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+  if(input$model %in% c("coxelasticnet") && !is.null(MODEL()$MODEL)){
     format(MODEL()$MODEL$alpha, digits = 3)
   } else {
     "N/A"
@@ -926,7 +926,7 @@ output$modelalpha<-renderText({
 })
 
 output$modellambda<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL)){
     format(MODEL()$MODEL$optimal_lambda, scientific = TRUE, digits = 4)
   } else {
     "N/A"
@@ -934,7 +934,7 @@ output$modellambda<-renderText({
 })
 
 output$modellambda1se<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL) && !is.null(MODEL()$MODEL$lambda_1se)){
     format(MODEL()$MODEL$lambda_1se, scientific = TRUE, digits = 4)
   } else {
     "N/A"
@@ -942,44 +942,24 @@ output$modellambda1se<-renderText({
 })
 
 output$modelnonzerocoef<-renderText({
-  if(input$model=="elasticnet" && !is.null(MODEL()$MODEL)){
-    coef_matrix <- as.matrix(coef(MODEL()$MODEL$glmnet_model, s=MODEL()$MODEL$lambda))
+  if(input$model %in% c("coxelasticnet", "coxlasso", "coxridge") && !is.null(MODEL()$MODEL)){
+    coef_matrix <- as.matrix(coef(MODEL()$MODEL, s=MODEL()$MODEL$lambda))
     sum(coef_matrix[-1,1] != 0)
   } else {
     "N/A"
   }
 })
 
-output$svmcost<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$cost, digits = 4)
-  } else {
-    "N/A"
-  }
-})
+# REMOVED: Classification model outputs (SVM, XGBoost, LightGBM, KNN)
+# These models do not support censored survival data
+# output$svmcost, output$svmgamma, output$svmkernel - REMOVED (SVM not supported)
+# output$xgbnrounds, output$xgbmaxdepth, output$xgbeta, output$xgbminchild - REMOVED (XGBoost not supported)
+# output$lgbnrounds, output$lgbnumleaves, output$lgblearningrate - REMOVED (LightGBM not supported)
+# output$knnk - REMOVED (KNN not supported)
 
-output$svmgamma<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$gamma, scientific = TRUE, digits = 4)
-  } else {
-    "N/A"
-  }
-})
-
-output$svmkernel<-renderText({
-  if(input$model=="svm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$kernel
-    cat("Kernel  type  :  ", MODEL()$MODEL$kernel, "\n")
-    cat("kernel :", MODEL()$modelparameters$kernel, " \n")
-    cat("Kernel  :  ", input$kernelsvm, "\n")
-    input$kernelsvm
-  } else {
-    "N/A"
-  }
-  })
-
+# Random Survival Forest hyperparameters (for RSF model)
 output$rfmtry<-renderText({
-  if(input$model=="randomforest" && !is.null(MODEL()$MODEL)){
+  if(input$model=="rsf" && !is.null(MODEL()$MODEL)){
     MODEL()$MODEL$optimal_mtry
   } else {
     "N/A"
@@ -987,89 +967,21 @@ output$rfmtry<-renderText({
 })
 
 output$rfntree<-renderText({
-  if(input$model=="randomforest" && !is.null(MODEL()$MODEL)){
+  if(input$model=="rsf" && !is.null(MODEL()$MODEL)){
     MODEL()$MODEL$ntree_used
   } else {
     "N/A"
   }
 })
 
-output$optiTuning_K = renderText({
-  if(input$model=="knn" && !is.null(MODEL()$MODEL)){
-    cat("the optimal k is :", MODEL()$MODEL$optimal_k, " \n")
-     MODEL()$MODEL$optimal_k
-  } else {
-    "N/A"
-  }
-})
+# COMMENTED OUT: Classification model hyperparameter outputs
+# These models (KNN, XGBoost, LightGBM) do not support censored survival data
+# and have been removed from the application
 
-output$xgbnrounds<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_nrounds
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbmaxdepth<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_max_depth
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbeta<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$optimal_eta, digits = 3)
-  } else {
-    "N/A"
-  }
-})
-
-output$xgbminchild<-renderText({
-  if(input$model=="xgboost" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_min_child_weight
-  } else {
-    "N/A"
-  }
-})
-
- output$lgbnrounds<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_nrounds
-  } else {
-    "N/A"
-  }
-})
-
- 
-
-output$lgbnumleaves<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_num_leaves
-  } else {
-    "N/A"
-  }
-
-})
-
-output$lgblearningrate<-renderText({
-  if(input$model=="lightgbm" && !is.null(MODEL()$MODEL)){
-    format(MODEL()$MODEL$optimal_learning_rate, digits = 3)
-  } else {
-    "N/A"
-  }
-})
-
- 
-output$knnk<-renderText({
-  if(input$model=="knn" && !is.null(MODEL()$MODEL)){
-    MODEL()$MODEL$optimal_k
-  } else {
-    "N/A"
-  }
-}) 
+# output$optiTuning_K = renderText({ ... })  # KNN - REMOVED
+# output$xgbnrounds, output$xgbmaxdepth, output$xgbeta, output$xgbminchild - XGBoost - REMOVED
+# output$lgbnrounds, output$lgbnumleaves, output$lgblearningrate - LightGBM - REMOVED
+# output$knnk - KNN - REMOVED 
 
 
 ####
@@ -1265,6 +1177,381 @@ output$ibsdecouv<-renderText({
     "N/A"
   }
 })
+
+# ===============================
+# TEMPORAL CLASSIFICATION OUTPUTS - LEARNING SET
+# ===============================
+
+# Calculate and store temporal metrics for learning set
+temporal_metrics_learning <- reactive({
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(datalearningmodel) && !is.null(datalearningmodel$reslearningmodel$riskscores)){
+    # Detect model type
+    model <- MODEL()$MODEL
+    model_type <- "cox"  # Default
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    # Calculate temporal metrics
+    temporal_results <- calculate_temporal_metrics(
+      model = model,
+      data = datalearningmodel$learningmodel,
+      time_col = "time",
+      status_col = "status",
+      time_points = NULL,  # Auto-selected
+      model_type = model_type
+    )
+
+    return(temporal_results)
+  } else {
+    return(NULL)
+  }
+})
+
+# Plot temporal classification metrics (AUC/Sens/Spec over time)
+output$plot_temporal_classif_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics)){
+    p <- plot_temporal_classification_metrics(
+      temporal_metrics,
+      title = "Time-Dependent Classification Metrics - Learning Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for temporal plot
+output$download_temporal_plot_learning <- downloadHandler(
+  filename = function() { paste('temporal_metrics_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    if(!is.null(temporal_metrics)){
+      p <- plot_temporal_classification_metrics(temporal_metrics)
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Table of temporal metrics
+output$table_temporal_metrics_learning <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Include confidence intervals if available
+    if("AUC_CI_lower" %in% colnames(metrics_df)){
+      metrics_df$AUC_CI_lower <- round(metrics_df$AUC_CI_lower, 3)
+      metrics_df$AUC_CI_upper <- round(metrics_df$AUC_CI_upper, 3)
+      # Create AUC_CI column for better display
+      metrics_df$AUC_95CI <- paste0("[", metrics_df$AUC_CI_lower, ", ", metrics_df$AUC_CI_upper, "]")
+      # Reorder columns
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "AUC_95CI", "Sensitivity", "Specificity", "Threshold")]
+    } else {
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    }
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Confusion matrix at a specific time point (median time)
+output$confusion_matrix_learning <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    # Use median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+      time_point <- round(result_at_time$time, 2)
+
+      # Convert to data frame with labels
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Display survival statistics (pure survival part)
+output$survival_stats_learning <- renderTable({
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(datalearningmodel) && !is.null(datalearningmodel$reslearningmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    stats <- display_survival_statistics(
+      model = model,
+      data = datalearningmodel$learningmodel,
+      time_col = "time",
+      status_col = "status",
+      model_type = model_type,
+      risk_scores = datalearningmodel$reslearningmodel$riskscores
+    )
+
+    if(!is.null(stats) && !is.null(stats$median_by_group)){
+      stats_df <- stats$median_by_group
+      stats_df$Median_Survival <- round(stats_df$Median_Survival, 2)
+      return(stats_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# ===============================
+# TEMPORAL CLASSIFICATION OUTPUTS - VALIDATION SET
+# ===============================
+
+# Calculate and store temporal metrics for validation set
+# CRITICAL: Uses thresholds from TRAINING set (not recalculated)
+temporal_metrics_validation <- reactive({
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    # Get training metrics to extract thresholds and time points
+    training_metrics <- temporal_metrics_learning()
+
+    # Extract thresholds and time points from training set
+    training_thresholds <- NULL
+    training_time_points <- NULL
+
+    if(!is.null(training_metrics)){
+      training_thresholds <- training_metrics$thresholds
+      training_time_points <- training_metrics$time_points
+    }
+
+    # Calculate validation metrics using TRAINING thresholds
+    temporal_results <- calculate_temporal_metrics(
+      model = model,
+      data = datavalidationmodel$validationmodel,
+      time_col = "time",
+      status_col = "status",
+      time_points = training_time_points,  # Use same time points as training
+      model_type = model_type,
+      training_thresholds = training_thresholds,  # Apply training thresholds
+      compute_ci = TRUE  # Compute CI for validation AUC
+    )
+
+    return(temporal_results)
+  } else {
+    return(NULL)
+  }
+})
+
+# Plot temporal classification metrics for validation
+output$plot_temporal_classif_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics)){
+    p <- plot_temporal_classification_metrics(
+      temporal_metrics,
+      title = "Time-Dependent Classification Metrics - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for temporal plot - validation
+output$download_temporal_plot_validation <- downloadHandler(
+  filename = function() { paste('temporal_metrics_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    if(!is.null(temporal_metrics)){
+      p <- plot_temporal_classification_metrics(temporal_metrics)
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Table of temporal metrics - validation
+output$table_temporal_metrics_validation <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Include confidence intervals if available
+    if("AUC_CI_lower" %in% colnames(metrics_df)){
+      metrics_df$AUC_CI_lower <- round(metrics_df$AUC_CI_lower, 3)
+      metrics_df$AUC_CI_upper <- round(metrics_df$AUC_CI_upper, 3)
+      # Create AUC_CI column for better display
+      metrics_df$AUC_95CI <- paste0("[", metrics_df$AUC_CI_lower, ", ", metrics_df$AUC_CI_upper, "]")
+      # Reorder columns - NOTE: Threshold is from TRAINING set
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "AUC_95CI", "Sensitivity", "Specificity", "Threshold")]
+    } else {
+      metrics_df <- metrics_df[, c("time", "N_patients", "N_excluded", "AUC", "Sensitivity", "Specificity", "Threshold")]
+    }
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Confusion matrix at median time - validation
+output$confusion_matrix_validation <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Download comprehensive results as Excel
+output$download_complete_results <- downloadHandler(
+  filename = function() { paste('survival_results_', Sys.Date(), '.xlsx', sep='') },
+  content = function(file) {
+    # Get model info
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+    if(!is.null(model) && inherits(model, "ranger")){
+      model_type <- "rsf"
+    } else if(!is.null(model) && inherits(model, "cv.glmnet")){
+      model_type <- "coxnet"
+    }
+
+    model_info <- list(
+      model_type = model_type,
+      date = Sys.Date()
+    )
+
+    # Export results
+    export_survival_results(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      model_info = model_info,
+      filename = file
+    )
+  },
+  contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# Download temporal metrics as CSV
+output$download_temporal_csv <- downloadHandler(
+  filename = function() { paste('temporal_metrics_', Sys.Date(), '.csv', sep='') },
+  content = function(file) {
+    export_results_csv(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      filename = file
+    )
+  },
+  contentType = "text/csv"
+)
+
+# Display survival statistics - validation
+output$survival_stats_validation <- renderTable({
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(datavalidationmodel) && !is.null(datavalidationmodel$resvalidationmodel$riskscores)){
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+
+    if(!is.null(model)){
+      if(inherits(model, "ranger")){
+        model_type <- "rsf"
+      } else if(inherits(model, "cv.glmnet")){
+        model_type <- "coxnet"
+      }
+    }
+
+    stats <- display_survival_statistics(
+      model = model,
+      data = datavalidationmodel$validationmodel,
+      time_col = "time",
+      status_col = "status",
+      model_type = model_type,
+      risk_scores = datavalidationmodel$resvalidationmodel$riskscores
+    )
+
+    if(!is.null(stats) && !is.null(stats$median_by_group)){
+      stats_df <- stats$median_by_group
+      stats_df$Median_Survival <- round(stats_df$Median_Survival, 2)
+      return(stats_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
 
 
 output$downloaddatavalidation <- downloadHandler(
@@ -2106,9 +2393,325 @@ output$downloadplottestparametersboth = downloadHandler(
 #     scale_fill_brewer(palette = "Set1") +
 #     # scale_fill_manual(values = custom_colors) +
 #     theme(axis.text.x = element_text(angle = 0, hjust = 0.5))
-#   
+#
 # }
 
-}) 
+##########################
+# New Survival Classif Tab Outputs
+##########################
+
+# Tables for confusion matrices - Training Set (for new tab)
+output$confusion_matrix_learning_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Tables for confusion matrices - Validation Set (for new tab)
+output$confusion_matrix_validation_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$detailed_results)){
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    result_at_time <- temporal_metrics$detailed_results[[median_idx]]
+
+    if(!is.null(result_at_time) && !is.null(result_at_time$confusion_matrix)){
+      cm <- result_at_time$confusion_matrix
+
+      cm_df <- as.data.frame.matrix(cm)
+      cm_df <- cbind(Predicted = rownames(cm_df), cm_df)
+      colnames(cm_df) <- c("Predicted", "Event", "Event-free")
+
+      return(cm_df)
+    }
+  }
+  return(NULL)
+}, include.rownames = FALSE)
+
+# Tables for temporal metrics - Training Set (for new tab)
+output$table_temporal_metrics_learning_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Select key columns
+    metrics_df <- metrics_df[, c("time", "AUC", "Sensitivity", "Specificity", "Threshold")]
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Tables for temporal metrics - Validation Set (for new tab)
+output$table_temporal_metrics_validation_tab <- renderTable({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$metrics_df)){
+    metrics_df <- temporal_metrics$metrics_df
+    # Round values for display
+    metrics_df$time <- round(metrics_df$time, 2)
+    metrics_df$AUC <- round(metrics_df$AUC, 3)
+    metrics_df$Sensitivity <- round(metrics_df$Sensitivity, 3)
+    metrics_df$Specificity <- round(metrics_df$Specificity, 3)
+    metrics_df$Threshold <- round(metrics_df$Threshold, 3)
+
+    # Select key columns - Note: Threshold is from TRAINING
+    metrics_df <- metrics_df[, c("time", "AUC", "Sensitivity", "Specificity", "Threshold")]
+
+    return(metrics_df)
+  } else {
+    return(NULL)
+  }
+}, include.rownames = FALSE)
+
+# Plot timeROC curve - Training Set
+output$plot_timeROC_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+    # Get median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    p <- plot_timeROC_curve(
+      temporal_metrics$timeROC_obj,
+      time_point_index = median_idx,
+      title = "Time-Dependent ROC Curve - Training Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No ROC curve available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for timeROC plot - Training
+output$download_timeROC_learning <- downloadHandler(
+  filename = function() { paste('timeROC_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+      n_times <- length(temporal_metrics$detailed_results)
+      median_idx <- ceiling(n_times / 2)
+
+      p <- plot_timeROC_curve(
+        temporal_metrics$timeROC_obj,
+        time_point_index = median_idx,
+        title = "Time-Dependent ROC Curve - Training Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 8, height = 8)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot timeROC curve - Validation Set
+output$plot_timeROC_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+
+  if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+    # Get median time point
+    n_times <- length(temporal_metrics$detailed_results)
+    median_idx <- ceiling(n_times / 2)
+
+    p <- plot_timeROC_curve(
+      temporal_metrics$timeROC_obj,
+      time_point_index = median_idx,
+      title = "Time-Dependent ROC Curve - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No ROC curve available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for timeROC plot - Validation
+output$download_timeROC_validation <- downloadHandler(
+  filename = function() { paste('timeROC_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    if(!is.null(temporal_metrics) && !is.null(temporal_metrics$timeROC_obj)){
+      n_times <- length(temporal_metrics$detailed_results)
+      median_idx <- ceiling(n_times / 2)
+
+      p <- plot_timeROC_curve(
+        temporal_metrics$timeROC_obj,
+        time_point_index = median_idx,
+        title = "Time-Dependent ROC Curve - Validation Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 8, height = 8)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot risk scatter with Youden threshold - Training Set
+output$plot_scatter_youden_learning <- renderPlot({
+  temporal_metrics <- temporal_metrics_learning()
+  datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+  if(!is.null(temporal_metrics) && !is.null(datalearningmodel)){
+    p <- plot_risk_density_with_threshold(
+      temporal_metrics,
+      title = "Risk Score Distribution - Training Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No scatter plot available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for scatter plot - Training
+output$download_scatter_learning <- downloadHandler(
+  filename = function() { paste('scatter_youden_learning', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_learning()
+    datalearningmodel <- MODEL()$DATALEARNINGMODEL
+
+    if(!is.null(temporal_metrics) && !is.null(datalearningmodel)){
+      p <- plot_risk_density_with_threshold(
+        temporal_metrics,
+        title = "Risk Score Distribution - Training Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Plot risk scatter with Youden threshold - Validation Set
+output$plot_scatter_youden_validation <- renderPlot({
+  temporal_metrics <- temporal_metrics_validation()
+  datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+  if(!is.null(temporal_metrics) && !is.null(datavalidationmodel)){
+    p <- plot_risk_density_with_threshold(
+      temporal_metrics,
+      title = "Risk Score Distribution - Validation Set"
+    )
+
+    if(!is.null(p)){
+      print(p)
+    } else {
+      plot(1, type = "n", main = "No scatter plot available", xlab = "", ylab = "")
+    }
+  } else {
+    plot(1, type = "n", main = "No temporal metrics available", xlab = "", ylab = "")
+  }
+})
+
+# Download handler for scatter plot - Validation
+output$download_scatter_validation <- downloadHandler(
+  filename = function() { paste('scatter_youden_validation', '.', input$paramdownplot, sep='') },
+  content = function(file) {
+    temporal_metrics <- temporal_metrics_validation()
+    datavalidationmodel <- MODEL()$DATAVALIDATIONMODEL
+
+    if(!is.null(temporal_metrics) && !is.null(datavalidationmodel)){
+      p <- plot_risk_density_with_threshold(
+        temporal_metrics,
+        title = "Risk Score Distribution - Validation Set"
+      )
+
+      if(!is.null(p)){
+        ggsave(file, plot = p, device = input$paramdownplot, width = 10, height = 6)
+      }
+    }
+  },
+  contentType = NA
+)
+
+# Download complete classification results (reuse existing function)
+output$download_classif_complete <- downloadHandler(
+  filename = function() { paste('survival_classif_results_', Sys.Date(), '.xlsx', sep='') },
+  content = function(file) {
+    # Get model info
+    model <- MODEL()$MODEL
+    model_type <- "cox"
+    if(!is.null(model) && inherits(model, "ranger")){
+      model_type <- "rsf"
+    } else if(!is.null(model) && inherits(model, "cv.glmnet")){
+      model_type <- "coxnet"
+    }
+
+    model_info <- list(
+      model_type = model_type,
+      date = Sys.Date()
+    )
+
+    # Export results
+    export_survival_results(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      model_info = model_info,
+      filename = file
+    )
+  },
+  contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+# Download classification CSV (reuse existing function)
+output$download_classif_csv <- downloadHandler(
+  filename = function() { paste('survival_classif_metrics_', Sys.Date(), '.csv', sep='') },
+  content = function(file) {
+    export_results_csv(
+      temporal_metrics_learning = temporal_metrics_learning(),
+      temporal_metrics_validation = temporal_metrics_validation(),
+      filename = file
+    )
+  },
+  contentType = "text/csv"
+)
+
+})
 
 # 

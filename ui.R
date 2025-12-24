@@ -276,12 +276,13 @@ shinyUI(fluidPage(
                                                      conditionalPanel(condition ="input.help",helpText("The shapiro test is a test of normallity. The F test is a test of equality of variance."))
                                               ),
                                               column(6,br(),
-                                                     conditionalPanel(condition ="input.test=='Wtest' || input.test=='Ttest'",
-                                                                      numericInput("thresholdFC","Fold change threshold" , 0, min =0, max = 5, step = 0.5),
-                                                                      conditionalPanel(condition ="input.help",helpText("Fold Change is the ratio of means between groups.")),
+                                                     conditionalPanel(condition ="input.test %in% c('coxwald', 'logrank')",
                                                                       numericInput("thresholdpv","p-value threshold" , 0.05, min =0, max = 1, step = 0.01),
-                                                                      checkboxInput("adjustpv", "adjust p-value " , value = FALSE),
-                                                                      conditionalPanel(condition ="input.help", helpText("Benjamini & Hochberg correction"))
+                                                                      checkboxInput("adjustpv", "adjust p-value (Benjamini-Hochberg)" , value = FALSE),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("P-value threshold for variable selection"),
+                                                                                       helpText("Cox Wald test: Tests association between each variable and survival"),
+                                                                                       helpText("Log-rank test: Non-parametric test for survival differences"))
                                                      ),
                                                      conditionalPanel(condition ="input.test=='clustEnet'",
                                                                       h5("Clustering + ElasticNet Parameters"),
@@ -296,9 +297,9 @@ shinyUI(fluidPage(
                                                                       checkboxInput("preprocessclustenet","Preprocess variables",TRUE),
                                                                       conditionalPanel(condition ="input.help",helpText("Filter low variance and low frequency variables before clustering."))
                                                      ),
-                                                     conditionalPanel(condition ="input.test=='lasso' || input.test=='elasticnet' || input.test=='ridge'",
+                                                     conditionalPanel(condition ="input.test %in% c('coxlasso', 'coxelasticnet', 'coxridge')",
                                                                       h5("Regularization Parameters"),
-                                                                      conditionalPanel(condition ="input.test=='elasticnet'",
+                                                                      conditionalPanel(condition ="input.test=='coxelasticnet'",
                                                                                        numericInput("alphaselection","Alpha (ElasticNet mixing)" , 0.5, min =0, max = 1, step = 0.1),
                                                                                        conditionalPanel(condition ="input.help",helpText("Alpha=1: Lasso, Alpha=0: Ridge, 0<Alpha<1: ElasticNet"))
                                                                       ),
@@ -312,7 +313,7 @@ shinyUI(fluidPage(
                                             ),br(),
                                             p(downloadButton('downloaddatastatistics', 'Download statistics'),downloadButton('downloadddatadiff', 'Download differently expressed variables'),align="center"),
                                             hr(),
-                                            conditionalPanel(condition= "input.test== 'Wtest' || input.test== 'Ttest'",
+                                            conditionalPanel(condition= "input.test %in% c('coxwald', 'logrank')",
                                                              fluidRow(
                                                                column(6,
                                                                       textOutput("nvarselect2",inline=T), "selected variables",
@@ -401,7 +402,8 @@ shinyUI(fluidPage(
                                                      helpText("/!\\ process can be long")
                                               ),
                                               column(4,
-                                                     conditionalPanel(condition ="input.model=='elasticnet'",
+                                                     # Hyperparameters for survival models only
+                                                     conditionalPanel(condition ="input.model %in% c('coxelasticnet')",
                                                                       h5("ElasticNet Hyperparameters"),
                                                                       radioButtons("tuning_method_en", "Tuning method:",
                                                                                    c(
@@ -421,7 +423,18 @@ shinyUI(fluidPage(
                                                                                        numericInput("lambdamodel","Lambda" , 0.01, min =0, max = 10, step = 0.01)
                                                                       )
                                                      ),
-                                                     conditionalPanel(condition ="input.model=='randomforest'",
+                                                     # Hyperparameters for Random Survival Forest
+                                                     conditionalPanel(condition ="input.model=='rsf'",
+                                                                      h5("Random Survival Forest Hyperparameters"),
+                                                                      numericInput("ntreerf","Number of trees" , 500, min =100, max = 2000, step = 100),
+                                                                      conditionalPanel(condition ="input.help",
+                                                                                       helpText("Number of survival trees to grow. More trees improve stability but increase computation time."),
+                                                                                       helpText("The mtry parameter (variables per split) is automatically optimized."))
+                                                     )
+                                                     # CLASSIFICATION MODELS REMOVED - APP NOW SUPPORTS ONLY SURVIVAL MODELS
+                                                     # Removed: randomforest, svm, xgboost, lightgbm, naivebayes, knn
+                                                     # Use Cox, RSF, or penalized Cox models (CoxLasso/ElasticNet/Ridge) for survival analysis
+                                                     # ,conditionalPanel(condition ="input.model=='randomforest'",
                                                                       h5("Random Forest Hyperparameters"),
                                                                       radioButtons("tuning_method_rf", "Tuning method:",
                                                                                    c("Manual parameters" = "manual",
@@ -871,16 +884,14 @@ shinyUI(fluidPage(
                                                      #                      "Random Forest"="randomforest",
                                                      #                      "Support Vector Machine" = "svm"),
                                                      #                    selected = "svm")
-                                                     checkboxGroupInput("modeltest", "Type of model to adjust",
+                                                     checkboxGroupInput("modeltest", "Type of survival model to test",
                                                                         c("No model" = "nomodel",
-                                                                          "Random Forest"="randomforest",
-                                                                          "Support Vector Machine" = "svm",
-                                                                          "ElasticNet"="elasticnet",
-                                                                          "XGBoost"="xgboost",
-                                                                          # "LightGBM"="lightgbm",  
-                                                                          "K-Nearest Neighbors"="knn",
-                                                                          "Naive Bayes"="naivebayes"),
-                                                                        selected = "svm")
+                                                                          "Cox Proportional Hazards" = "cox",
+                                                                          "Random Survival Forest" = "rsf",
+                                                                          "Cox Lasso" = "coxlasso",
+                                                                          "Cox ElasticNet" = "coxelasticnet",
+                                                                          "Cox Ridge" = "coxridge"),
+                                                                        selected = "cox")
                                               ),
                                               column(4,
                                                      #numericInput("thresholdmodeltest","threshold model" ,0, min = -1, max = 1, step = 0.05),
