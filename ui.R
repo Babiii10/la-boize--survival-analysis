@@ -910,171 +910,23 @@ shinyUI(fluidPage(
                                                      plotOutput("plottestparameterslearning")%>% withSpinner(color="#0dc5c1",type = 1),
                                                      p(downloadButton("downloadplottestparameterslearning","Download plot"), align = 'center')
                                               ),
-                                              tabPanel("Test parameters", icon  =  icon("cog"),
-                                                       fluidRow(
-                                                         column(6,
-                                                                h4("Selection Parameters"),
-                                                                sliderInput("prctvaluestest", "Percent of values accepted",min = 0, max = 100, value = c(50,90),width="60%"),
-                                                                checkboxGroupInput("selectmethodtest","Methods of selection ",c("selection on all samples"="nogroup","each group has more than x% of values "="bothgroups",
-                                                                                                                                "at least one group has more than x% of more"="onegroup"),selected ="bothgroups" )
-                                                         ),
-                                                         column(6,
-                                                                checkboxGroupInput("NAstructuretest", "Select variables with a NA's structure " , choices = list("TRUE /!\\"=TRUE,"FALSE"=FALSE),selected ="FALSE"),
-                                                                helpText("/!\\ process can be long"),
-                                                                conditionalPanel(condition ="output.testNAstructure ",
-                                                                                 fluidRow(
-                                                                                   column(6,
-                                                                                          numericInput("thresholdNAstructuretest","pvalue for the structure test" , 0.05, min = 0, max = 1, step = 0.005),
-                                                                                          radioButtons("structdatatest", "search structure in",c("all dataset" = "alldata","selected dataset" = "selecteddata"))
-                                                                                   ),
-                                                                                   column(6,
-                                                                                          numericInput("maxvaluesgroupmintest","The group with the minimum number of values has at most x% of values",value = 25,min = 0,max = 100,step = 5),
-                                                                                          numericInput("minvaluesgroupmaxtest","The group with the maximum number of values has at least y% of values",value = 75,min = 0,max = 100,step = 5)
-                                                                                   )
-                                                                                 )
-                                                                )
-                                                         )
-                                                       ),
-                                                       #textOutput("testNAstructure"),
-                                                       #hr(),
-                                                       fluidRow(
-                                                         column(6,h3("Transform Parameters")),
-                                                         column(6,h3("Statistics Parameters"))
-                                                       ),
-                                                       fluidRow(
-                                                         column(3,
-                                                                checkboxGroupInput("rempNAtest", "Replacing NA (Not Attributes) by",
-                                                                                   c("zero" = "z",
-                                                                                     "mean of the cohort" = "moy",
-                                                                                     "mean by group"="moygr",
-                                                                                     "PCA estimation" = "pca",
-                                                                                     "Random forest estimation /!\\" = "missforest"),
-                                                                                   selected = "moygr")
-                                                         ),
-                                                         column(3,
-                                                                #br(),br(),
-                                                                checkboxGroupInput("logtest","transform data in log",choices = list("TRUE"=TRUE,"FALSE"=FALSE),inline = TRUE,selected = "FALSE"),
-                                                                radioButtons("logtypetest",label = NULL,c("ln"="logn","log 10"="log10","log2"="log2"),inline = TRUE),
-                                                                checkboxGroupInput("standardizationtest","standardization dataset",
-                                                                                   choices = list("TRUE"=TRUE,"FALSE"=FALSE),inline = TRUE,
-                                                                                   selected = "FALSE"),
-                                                                checkboxGroupInput("arcsintest","arcsine transformation",choices = list("TRUE"=TRUE,"FALSE"=FALSE),inline = TRUE,selected ="FALSE")
-                                                         ),
-                                                         #),
-                                                         #hr(),
-                                                         #fluidRow(
-                                                         column(3,
-                                                                checkboxGroupInput("testtest", "Tests",
-                                                                                   #c( "No test"="notest","Wilcoxon Test" = "Wtest","Student Test" = "Ttest"),
-                                                                                   c( "No test"="notest",
-                                                                                      "Wilcoxon Test" = "Wtest",
-                                                                                      "Student Test" = "Ttest",
-                                                                                      "Lasso" = "lasso", 
-                                                                                      "ElasticNet" = "elasticnet",
-                                                                                      "Ridge" = "ridge"),
-                                                                                   selected = "Wtest"),
-                                                                checkboxGroupInput("adjustpvtest", "adjust p-value " , 
-                                                                                   choices = list("TRUE"=TRUE,"FALSE"=FALSE),
-                                                                                   inline = TRUE,
-                                                                                   selected = "FALSE")
-                                                         ),
-                                                         column(3,
-                                                                numericInput("thresholdFCtest","choise of the Fold change threshold" , 0, min =0, max = 5, step = 0.5),
-                                                                numericInput("thresholdpvtest","choise of the p-value threshold %" , 0.05, min =0, max = 1, step = 0.01)
-                                                         )
-                                                       ),
-                                                       #hr(),
-                                                       h3("Model Parameters"),
-                                                       fluidRow(
-                                                         column(3,
-                                                                # checkboxGroupInput("modeltest", "Type of model to adjust", 
-                                                                #                    c("No model" = "nomodel",
-                                                                #                      "Random Forest"="randomforest",
-                                                                #                      "Support Vector Machine" = "svm"),
-                                                                #                    selected = "svm")
-                                                                checkboxGroupInput("modeltest", "Type of model to adjust",
-                                                                                   c("No model" = "nomodel",
-                                                                                     "Random Forest"="randomforest",
-                                                                                     "Support Vector Machine" = "svm",
-                                                                                     "ElasticNet"="elasticnet",
-                                                                                     "XGBoost"="xgboost",
-                                                                                     # "LightGBM"="lightgbm",  
-                                                                                     "K-Nearest Neighbors"="knn",
-                                                                                     "Naive Bayes"="naivebayes"),
-                                                                                   selected = "svm")
-                                                         ),
-                                                         column(4,
-                                                                #numericInput("thresholdmodeltest","threshold model" ,0, min = -1, max = 1, step = 0.05),
-                                                                radioButtons("tuning_method_test", "Hyperparameter tuning:",
-                                                                             c("Default parameters" = "default",
-                                                                               "Automatic tuning" = "automatic"),
-                                                                             selected = "default"),
-                                                                helpText("Automatic tuning uses model-specific optimization (tune.svm, tuneRF, cv.glmnet, xgb.cv, etc.)"),
-                                                                checkboxGroupInput("fstest","features selection by cross validation",choices = list("TRUE /!\\"=TRUE,"FALSE"=FALSE),inline = TRUE,selected ="FALSE"),
-                                                                helpText("/!\\ process can be long"),
-                                                                radioButtons("threshold_method_test", "Threshold optimization:",
-                                                                             c("Fixed (0.5 for probabilistic models)" = "fixed",
-                                                                               "Youden (maximize sensitivity + specificity)" = "youden",
-                                                                               "Equiprobability (equal error rate)" = "equiprob"),
-                                                                             selected = "fixed"),
-                                                                helpText("Threshold calculated on TRAIN data, applied to validation. 
-                                                                         Youden: optimal balance sens/spec. 
-                                                                         Equiprobability: minimizes FP=FN. 
-                                                                         Note: Multiple testing may slightly inflate validation metrics.")
-                                                         ),
-                                                         column(5,
-                                                                p(actionButton("tunetest",h4("Test all models"),width=200),align="center")
-                                                         )
-                                                       ),
-                                                       dataTableOutput("tabtestparameters")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                       p(downloadButton("downloadtabtestparameters","Download dataset"),align="center"),
-                                                       # les graphiques pour les différents paramètres
-                                                       fluidRow(
-                                                         column(6,
-                                                                plotOutput("plottestparameterslearning")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                p(downloadButton("downloadplottestparameterslearning","Download plot"), align = 'center')
-                                                         ),
-                                                         column(6,
-                                                                plotOutput("plottestparametersvalidation")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                                p(downloadButton("downloadplottestparametersvalidation","Download plot"), align = 'center')
-                                                         )
-                                                       ),
-                                                       fluidRow(
-                                                         column(
-                                                           12,
-                                                           plotOutput("plottestparametersboth")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                           p(downloadButton("downloadplottestparametersboth","Download plot"), align = 'center')
-                                                         )
-                                                       ),
-                                                       # fluidRow(
-                                                       #   column(
-                                                       #     12,
-                                                       #     plotOutput("plottestparametersboth")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                       #     p(downloadButton("downloadplottestparametersboth","Download plot"), align = 'center')
-                                                       #   )
-                                                       # ),
-                                                       # h4("Additional Analysis", style = "margin-top: 30px; margin-bottom: 20px;"),
-                                                       # fluidRow(
-                                                       #   column(
-                                                       #     12,
-                                                       #     h5("Threshold vs Performance", style = "margin-bottom: 10px;"),
-                                                       #     plotOutput("plottestparametersthreshold")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                       #     p(downloadButton("downloadplottestparametersthreshold","Download plot"), align = 'center'),
-                                                       #     helpText("Relationship between optimal threshold and validation performance. Each point represents a parameter combination. The curve shows the trend.")
-                                                       #   )
-                                                       # ),
-                                                       fluidRow(
-                                                         column(
-                                                           12,
-                                                           h5("Overfitting Analysis", style = "margin-top: 20px; margin-bottom: 10px;"),
-                                                           plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
-                                                           p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
-                                                           helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
-                                                         )
-                                                       )
+                                              column(6,
+                                                     plotOutput("plottestparametersvalidation")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                     p(downloadButton("downloadplottestparametersvalidation","Download plot"), align = 'center')
+                                              )
+                                            ),
+                                            hr(),
+                                            # Overfitting Analysis
+                                            fluidRow(
+                                              column(12,
+                                                h5("Overfitting Analysis"),
+                                                plotOutput("plottestparametersoverfitting")%>% withSpinner(color="#0dc5c1",type = 1),
+                                                p(downloadButton("downloadplottestparametersoverfitting","Download plot"), align = 'center'),
+                                                helpText("Analysis of model overfitting. Positive values indicate overfitting (learning performance > validation performance). Values close to zero indicate good generalization.")
                                               )
                                             )
                                    ),
+
 
                                    # New Survival Classif tab
                                    tabPanel("Survival Classif", icon = icon("chart-line"),
@@ -1163,5 +1015,4 @@ shinyUI(fluidPage(
                                    )
                        )
       )
-    )
     )
