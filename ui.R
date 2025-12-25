@@ -35,8 +35,19 @@ shinyUI(fluidPage(
   #   )
   # ),
   
-  # Application title
-  titlePanel("Survival Analysis"),
+  # Application title with language selector
+  titlePanel(
+    div(
+      div(style = "display: inline-block; width: 80%;", "Survival Analysis"),
+      div(style = "display: inline-block; width: 18%; float: right;",
+          selectInput("app_language",
+                     label = NULL,
+                     choices = c("English" = "en", "Français" = "fr"),
+                     selected = "en",
+                     width = "100%")
+      )
+    )
+  ),
   hr(nrow = 2),
   sidebarLayout(
     sidebarPanel(
