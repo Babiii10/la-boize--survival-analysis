@@ -167,21 +167,50 @@ shinyServer(function(input, output,session) {
                 selected = default_id)
   })
 
+  # Add tooltips for column selectors (updated when language changes)
+  observeEvent(input$app_language, {
+    lang <- if(!is.null(input$app_language)) input$app_language else "en"
+
+    # Remove existing tooltips if any
+    shinyBS::removeTooltip(session, "time_column")
+    shinyBS::removeTooltip(session, "status_column")
+    shinyBS::removeTooltip(session, "id_column")
+
+    # Add tooltips with current language
+    shinyBS::addTooltip(session, "time_column",
+                       title = t("tooltip_time_column", lang),
+                       placement = "right",
+                       trigger = "hover")
+
+    shinyBS::addTooltip(session, "status_column",
+                       title = t("tooltip_status_column", lang),
+                       placement = "right",
+                       trigger = "hover")
+
+    shinyBS::addTooltip(session, "id_column",
+                       title = t("tooltip_id_column", lang),
+                       placement = "right",
+                       trigger = "hover")
+  }, ignoreNULL = FALSE, ignoreInit = FALSE)
+
   # Validation feedback for column selection
-  observeEvent(c(input$time_column, input$status_column), {
+  observeEvent(c(input$time_column, input$status_column, input$app_language), {
     req(input$time_column, input$status_column)
+
+    # Get current language
+    lang <- if(!is.null(input$app_language)) input$app_language else "en"
 
     # Check if time and status columns are different
     if(input$time_column == input$status_column){
       shinyFeedback::feedbackDanger(
         "time_column",
         show = TRUE,
-        text = "Time and Status columns must be different!"
+        text = t("columns_different", lang)
       )
       shinyFeedback::feedbackDanger(
         "status_column",
         show = TRUE,
-        text = "Time and Status columns must be different!"
+        text = t("columns_different", lang)
       )
     } else {
       # Clear feedback if columns are valid
@@ -191,9 +220,12 @@ shinyServer(function(input, output,session) {
   }, ignoreInit = TRUE)
 
   # Validation feedback for data after confirmation
-  observeEvent(input$confirmdatabutton, {
+  observeEvent(c(input$confirmdatabutton, input$app_language), {
     req(DATA()$LEARNING)
     learning <- DATA()$LEARNING
+
+    # Get current language
+    lang <- if(!is.null(input$app_language)) input$app_language else "en"
 
     # Check if time and status columns exist
     if(!"time" %in% colnames(learning)){
@@ -210,7 +242,7 @@ shinyServer(function(input, output,session) {
         shinyFeedback::feedbackDanger(
           "confirmdatabutton",
           show = TRUE,
-          text = paste0("❌ Error: Time values must be > 0. Found invalid values in rows: ",
+          text = paste0("❌ ", t("time_positive_error", lang), " ",
                        paste(head(negative_rows, 10), collapse = ", "),
                        if(length(negative_rows) > 10) "..." else "")
         )
@@ -219,13 +251,13 @@ shinyServer(function(input, output,session) {
         shinyFeedback::feedbackWarning(
           "confirmdatabutton",
           show = TRUE,
-          text = paste0("⚠️ Warning: Time column contains ", na_count, " NA values")
+          text = paste0("⚠️ ", t("time_na_warning", lang), " ", na_count, " ", t("time_na_values", lang))
         )
       } else {
         shinyFeedback::feedbackSuccess(
           "confirmdatabutton",
           show = TRUE,
-          text = "✓ Time values validated successfully"
+          text = paste0("✓ ", t("time_validated", lang))
         )
       }
     }
@@ -245,7 +277,7 @@ shinyServer(function(input, output,session) {
         shinyFeedback::feedbackDanger(
           "status_column",
           show = TRUE,
-          text = paste0("❌ Error: Status must have exactly 2 unique values. Found: ",
+          text = paste0("❌ ", t("status_two_values", lang), " ",
                        length(unique_status), " (", paste(unique_status, collapse = ", "), ")")
         )
       } else if(any(is.na(status_values))){
@@ -253,7 +285,7 @@ shinyServer(function(input, output,session) {
         shinyFeedback::feedbackWarning(
           "status_column",
           show = TRUE,
-          text = paste0("⚠️ Warning: Status column contains ", na_count, " NA values")
+          text = paste0("⚠️ ", t("status_na_warning", lang), " ", na_count, " ", t("time_na_values", lang))
         )
       } else {
         # Success message
@@ -262,7 +294,8 @@ shinyServer(function(input, output,session) {
         shinyFeedback::feedbackSuccess(
           "status_column",
           show = TRUE,
-          text = paste0("✓ Status validated: ", event_count, " events, ", censored_count, " censored")
+          text = paste0("✓ ", t("status_validated", lang), " ", event_count, " ", t("events", lang), ", ",
+                       censored_count, " ", t("censored", lang))
         )
       }
     }
@@ -572,19 +605,21 @@ shinyServer(function(input, output,session) {
       downloaddataset(   DATA()$VALIDATION, file) })
 
   # Validation feedback for selection parameters
-  observeEvent(input$prctvalues, {
+  observeEvent(c(input$prctvalues, input$app_language), {
     if(!is.null(input$prctvalues)){
+      lang <- if(!is.null(input$app_language)) input$app_language else "en"
+
       if(input$prctvalues < 0 || input$prctvalues > 100){
         shinyFeedback::feedbackDanger(
           "prctvalues",
           show = TRUE,
-          text = "Percentage must be between 0 and 100"
+          text = t("percentage_range", lang)
         )
       } else {
         shinyFeedback::feedbackSuccess(
           "prctvalues",
           show = TRUE,
-          text = paste0("✓ Valid: ", input$prctvalues, "%")
+          text = paste0("✓ ", t("valid_percentage", lang), " ", input$prctvalues, "%")
         )
       }
     }
@@ -648,6 +683,39 @@ shinyServer(function(input, output,session) {
       }
     }
   }, ignoreInit = TRUE)
+
+  # Add tooltips for selection and test parameters (updated when language changes)
+  observeEvent(input$app_language, {
+    lang <- if(!is.null(input$app_language)) input$app_language else "en"
+
+    # Remove existing tooltips if any
+    shinyBS::removeTooltip(session, "prctvalues")
+    shinyBS::removeTooltip(session, "thresholdNAstructure")
+    shinyBS::removeTooltip(session, "thresholdFC")
+    shinyBS::removeTooltip(session, "thresholdpv")
+
+    # Add tooltips for selection parameters
+    shinyBS::addTooltip(session, "prctvalues",
+                       title = t("tooltip_prctvalues", lang),
+                       placement = "right",
+                       trigger = "hover")
+
+    shinyBS::addTooltip(session, "thresholdNAstructure",
+                       title = t("tooltip_thresholdNAstructure", lang),
+                       placement = "right",
+                       trigger = "hover")
+
+    # Add tooltips for test parameters
+    shinyBS::addTooltip(session, "thresholdFC",
+                       title = t("tooltip_thresholdFC", lang),
+                       placement = "right",
+                       trigger = "hover")
+
+    shinyBS::addTooltip(session, "thresholdpv",
+                       title = t("tooltip_thresholdpv", lang),
+                       placement = "right",
+                       trigger = "hover")
+  }, ignoreNULL = FALSE, ignoreInit = FALSE)
 
 #################
 SELECTDATA<-reactive({

@@ -46,7 +46,163 @@ usePackage("xgboost")#for xgboost gradient boosting
 usePackage("lightgbm")#for lightgbm gradient boosting
 usePackage("class")#for k-nearest neighbors
 usePackage("shinyFeedback")#for user feedback in UI
+usePackage("shinyBS")#for tooltips and popovers
 
+
+##########################
+# Translation System (FR/EN)
+##########################
+
+# Translation dictionary
+translations <- list(
+  # Column validation messages
+  "columns_different" = list(
+    en = "Time and Status columns must be different!",
+    fr = "Les colonnes Temps et Statut doivent être différentes !"
+  ),
+
+  # Time validation messages
+  "time_positive_error" = list(
+    en = "Error: Time values must be > 0. Found invalid values in rows:",
+    fr = "Erreur : Les valeurs de temps doivent être > 0. Valeurs invalides trouvées aux lignes :"
+  ),
+  "time_na_warning" = list(
+    en = "Warning: Time column contains",
+    fr = "Avertissement : La colonne temps contient"
+  ),
+  "time_na_values" = list(
+    en = "NA values",
+    fr = "valeurs NA"
+  ),
+  "time_validated" = list(
+    en = "Time values validated successfully",
+    fr = "Valeurs de temps validées avec succès"
+  ),
+
+  # Status validation messages
+  "status_two_values" = list(
+    en = "Error: Status must have exactly 2 unique values. Found:",
+    fr = "Erreur : Le statut doit avoir exactement 2 valeurs uniques. Trouvé :"
+  ),
+  "status_na_warning" = list(
+    en = "Warning: Status column contains",
+    fr = "Avertissement : La colonne statut contient"
+  ),
+  "status_validated" = list(
+    en = "Status validated:",
+    fr = "Statut validé :"
+  ),
+  "events" = list(
+    en = "events",
+    fr = "événements"
+  ),
+  "censored" = list(
+    en = "censored",
+    fr = "censurés"
+  ),
+
+  # Selection parameter messages
+  "percentage_range" = list(
+    en = "Percentage must be between 0 and 100",
+    fr = "Le pourcentage doit être entre 0 et 100"
+  ),
+  "valid_percentage" = list(
+    en = "Valid:",
+    fr = "Valide :"
+  ),
+  "must_be_range" = list(
+    en = "Must be between 0 and 100",
+    fr = "Doit être entre 0 et 100"
+  ),
+  "max_less_min" = list(
+    en = "Max group min should be ≤ Min group max",
+    fr = "Le max du groupe min doit être ≤ au min du groupe max"
+  ),
+  "min_greater_max" = list(
+    en = "Min group max should be ≥ Max group min",
+    fr = "Le min du groupe max doit être ≥ au max du groupe min"
+  ),
+  "pvalue_range" = list(
+    en = "P-value threshold must be between 0 and 1",
+    fr = "Le seuil de p-value doit être entre 0 et 1"
+  ),
+
+  # Test parameter messages
+  "fc_positive" = list(
+    en = "Fold-change threshold must be positive (≥ 0)",
+    fr = "Le seuil de fold-change doit être positif (≥ 0)"
+  ),
+  "valid_fc" = list(
+    en = "Valid: FC ≥",
+    fr = "Valide : FC ≥"
+  ),
+  "valid_pvalue" = list(
+    en = "Valid: p <",
+    fr = "Valide : p <"
+  ),
+
+  # Tooltips - Column selection
+  "tooltip_time_column" = list(
+    en = "Select the column containing survival time (must be numeric and > 0)",
+    fr = "Sélectionnez la colonne contenant le temps de survie (doit être numérique et > 0)"
+  ),
+  "tooltip_status_column" = list(
+    en = "Select the column containing event status (0 = censored, 1 = event)",
+    fr = "Sélectionnez la colonne contenant le statut d'événement (0 = censuré, 1 = événement)"
+  ),
+  "tooltip_id_column" = list(
+    en = "Optional: Select a column to use as row identifiers (patient ID, sample name, etc.)",
+    fr = "Optionnel : Sélectionnez une colonne à utiliser comme identifiants (ID patient, nom échantillon, etc.)"
+  ),
+
+  # Tooltips - Selection parameters
+  "tooltip_prctvalues" = list(
+    en = "Maximum percentage of missing values (NA) allowed per feature. Features with more NA will be excluded.",
+    fr = "Pourcentage maximum de valeurs manquantes (NA) autorisé par variable. Les variables avec plus de NA seront exclues."
+  ),
+  "tooltip_maxvaluesgroupmin" = list(
+    en = "Minimum percentage threshold for the group with maximum values",
+    fr = "Seuil de pourcentage minimum pour le groupe avec valeurs maximales"
+  ),
+  "tooltip_minvaluesgroupmax" = list(
+    en = "Maximum percentage threshold for the group with minimum values",
+    fr = "Seuil de pourcentage maximum pour le groupe avec valeurs minimales"
+  ),
+  "tooltip_thresholdNAstructure" = list(
+    en = "P-value threshold for testing NA structure (0 < α < 1). Lower values are more stringent.",
+    fr = "Seuil de p-value pour tester la structure des NA (0 < α < 1). Des valeurs plus faibles sont plus strictes."
+  ),
+
+  # Tooltips - Test parameters
+  "tooltip_thresholdFC" = list(
+    en = "Minimum fold-change threshold for differential analysis. Only features with |FC| ≥ threshold will be selected.",
+    fr = "Seuil minimal de fold-change pour l'analyse différentielle. Seules les variables avec |FC| ≥ seuil seront sélectionnées."
+  ),
+  "tooltip_thresholdpv" = list(
+    en = "P-value significance threshold (0 < p < 1). Features with p-value < threshold are considered significant.",
+    fr = "Seuil de significativité de la p-value (0 < p < 1). Les variables avec p-value < seuil sont considérées significatives."
+  ),
+
+  # UI labels
+  "language_label" = list(
+    en = "Language",
+    fr = "Langue"
+  )
+)
+
+# Function to get translated message
+t <- function(key, lang = "en") {
+  if(key %in% names(translations)) {
+    msg <- translations[[key]][[lang]]
+    if(is.null(msg)) {
+      # Fallback to English if translation not found
+      return(translations[[key]][["en"]])
+    }
+    return(msg)
+  }
+  # Return key if not found in dictionary
+  return(key)
+}
 
 ##########################
 # Survival Analysis Helper Functions
